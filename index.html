@@ -1,0 +1,1938 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>برنامج مؤشر أداء المشغل</title>
+    <!-- تحميل Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- خط Noto Sans Arabic لـلغة العربية -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;800&display=swap" rel="stylesheet">
+    <!-- مكتبة jsPDF لتصدير PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        /* التنسيق العام للخطوط والألوان */
+        :root {
+            --header-bg: #EAC696; /* بني ذهبي فاتح رملي */
+            --button-bg: #C89F6F; /* بني رملي ذهبي أغمق */
+        }
+
+        body {
+            font-family: 'Noto Sans Arabic', sans-serif;
+            background-color: #f8f8f8;
+        }
+
+        /* تنسيق الأزرار المشترك */
+        .app-btn {
+            background-color: var(--button-bg);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.3s;
+            font-weight: 600;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            white-space: nowrap; /* منع انقسام نص الزر */
+        }
+
+        .app-btn:hover {
+            background-color: #A0835B;
+        }
+
+        /* تنسيق رأس البرنامج - ارتفاع 120px */
+        .app-header {
+            height: 120px;
+            background-color: var(--header-bg);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* تحديد الألوان الخاصة بأعمدة التقييم */
+        .bg-supervisor { background-color: #E6FFEC; } /* أخضر فاتح */
+        .bg-accountant { background-color: #FFFBE6; } /* بني فاتح (أصفر باهت) */
+        .bg-butcher { background-color: #FFE6E6; }    /* أحمر فاتح */
+        .bg-cleaner { background-color: #FFF3E6; }    /* برتقالي فاتح */
+
+        /* تخصيص لطباعة الفاتورة */
+        @media print {
+            body {
+                margin: 0;
+                /* تحديد اتجاه الطباعة للمناظر الطبيعية (Landscape) */
+                -webkit-print-color-adjust: exact !important;
+                color-adjust: exact !important;
+                /* تحديد حجم A4 مع اتجاه أفقي */
+                size: A4 landscape;
+            }
+            #app-container { display: none; }
+            #invoice-print-view {
+                display: block !important;
+                width: 100vw;
+                height: 100vh;
+                margin: 0 auto;
+                padding: 10mm;
+            }
+            /* جعل الفاتورة تملأ العرض عند الطباعة */
+            #invoice-printable {
+                min-width: 100%;
+                box-shadow: none !important;
+            }
+        }
+        
+        /* إشعارات */
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #EF4444;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body class="bg-white">
+
+    <!-- شاشة الترحيب واللوحات الأخرى -->
+    <div id="app-container" class="min-h-screen flex flex-col items-center">
+
+        <!-- رأس البرنامج المشترك -->
+        <header id="app-header" class="app-header w-full flex flex-col md:flex-row items-center justify-between p-4 shadow-lg sticky top-0 z-10 hidden">
+            <h1 id="header-title" class="text-3xl font-bold text-amber-900 mb-2 md:mb-0"></h1>
+            <!-- تم إضافة flex-wrap و gap-2 لضمان عدم تداخل الأزرار على الشاشات الصغيرة -->
+            <nav id="navbar" class="flex flex-wrap justify-center md:justify-end gap-2"></nav>
+        </header>
+
+        <!-- المحتوى الرئيسي للشاشة -->
+        <main id="main-content" class="w-full max-w-7xl flex-grow p-4 md:p-8"></main>
+    </div>
+
+    <!-- حاوية عرض الطباعة (مخفية حتى يتم الضغط على زر الطباعة) -->
+    <div id="invoice-print-view" class="hidden"></div>
+    
+    <!-- Modal Container -->
+    <div id="appModal" class="hidden"></div>
+
+
+    <script>
+        // === 1. تعريف المتغيرات والقيم الأولية ===
+        const LS_KEY = 'abattoir_kpi_data_v3';
+        const APP_STATE = {
+            currentScreen: 'splash',
+            isAuthReady: false,
+            loggedInUser: null,
+            isAdmin: false,
+            isApprover: false,
+            currentSite: null,
+            currentReportDate: new Date().toISOString().split('T')[0],
+        };
+
+        // الهيكل الافتراضي للبيانات
+        let DATA = {
+            settings: {
+                users: [
+                    { id: '70062', name: 'Musab Ali (Admin)', role: 'admin', siteId: 'Ghayathi', signature: null },
+                    { id: '70060', name: 'Fadil (User)', role: 'user', siteId: 'Sil', signature: null },
+                    { id: '80000', name: 'Al-Muatamid (Approver)', role: 'approver', siteId: 'All', signature: null }
+                ],
+                sites: [
+                    { 
+                        id: 'Ghayathi', 
+                        name: 'مسلخ غياثي', 
+                        operator: 'شركة الجزيرة الخضراء للاغنام والمواشي', 
+                        contract: 'DRM-0024/2', 
+                        staff: [
+                            { role: 'مشرف', name: 'أحمد محمد', id: 'M001' },
+                            { role: 'محاسب', name: 'سالم علي', id: 'A001' },
+                            { role: 'مراقب', name: 'خالد إبراهيم', id: 'S001' },
+                            { role: 'قصاب', name: 'محمد حسن', id: 'B001' },
+                            { role: 'قصاب', name: 'علي محمود', id: 'B002' },
+                            { role: 'قصاب', name: 'يوسف أحمد', id: 'B003' },
+                            { role: 'قصاب', name: 'حمزة كمال', id: 'B004' },
+                            { role: 'عامل نظافة', name: 'فارس جمال', id: 'C001' },
+                            { role: 'عامل نظافة', name: 'ناصر راشد', id: 'C002' }
+                        ] 
+                    },
+                    { 
+                        id: 'Sil', 
+                        name: 'مسلخ مدينة السلع', 
+                        operator: 'شركة النور للمواشي', 
+                        contract: 'SLM-001/24', 
+                        staff: [
+                            { role: 'مشرف', name: 'مبارك سعيد', id: 'M002' },
+                            { role: 'محاسب', name: 'سعيد خليفة', id: 'A002' },
+                            { role: 'مراقب', name: 'راشد ناصر', id: 'S002' },
+                            { role: 'قصاب', name: 'جاسم محمد', id: 'B005' },
+                            { role: 'قصاب', name: 'عبدالله علي', id: 'B006' },
+                            { role: 'قصاب', name: 'سالم أحمد', id: 'B007' },
+                            { role: 'قصاب', name: 'محمد خالد', id: 'B008' },
+                            { role: 'عامل نظافة', name: 'خليفة محمد', id: 'C003' },
+                            { role: 'عامل نظافة', name: 'ناصر عبدالله', id: 'C004' }
+                        ] 
+                    }
+                ],
+                // تحديث قائمة KPI لربطها بالهيكلة الجديدة للتقرير الشهري
+                kpis: [
+                    // A. خدمات الإدارة
+                    { name: 'الحضور والانصراف', category: 'الإدارة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'] },
+                    { name: 'توفير تقارير إدارية من المشرف', category: 'الإدارة', workers: ['مشرف'] },
+                    
+                    // B. خدمات الذبح
+                    { name: 'النظافة الشخصية', category: 'الذبح', workers: ['قصاب', 'عامل نظافة'] },
+                    { name: 'نظافة المعدات', category: 'الذبح', workers: ['قصاب', 'عامل نظافة'] },
+                    { name: 'نظافة مكان العمل', category: 'الذبح', workers: ['قصاب', 'عامل نظافة'] },
+                    { name: 'توفير المعدات والأدوات للعمل', category: 'الذبح', workers: ['مشرف'] },
+                    
+                    // C. خدمات النظافة والصحة
+                    { name: 'شهادات تدريب السلامة الغذائية EFST', category: 'النظافة والصحة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'] },
+                    { name: 'شهادة تدريب السلامة المهنية', category: 'النظافة والصحة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'] },
+                    { name: 'توفير مستلزمات النظافة والمنظفات', category: 'النظافة والصحة', workers: ['مشرف'] },
+                    
+                    // D. خدمات الصيانة
+                    { name: 'الصيانة المطلوبة من المقاول', category: 'الصيانة', workers: ['مشرف'] }
+                ],
+                // تكاليف وأعداد افتراضية
+                invoiceCosts: {
+                    'مشرف': 4500, 'محاسب': 3500, 'مراقب': 2250, 'قصاب': 11500, 'عامل نظافة': 2300, 'مواد التنظيف': 1000
+                },
+                violations: [
+                    { id: 1, name: 'عدم توفير شهادات سلامة', value: 1000, description: 'خصم لعدم التزام العاملين بشهادات السلامة.' },
+                    { id: 2, name: 'تأخير في الصيانة', value: 500, description: 'خصم بسبب تأخر المقاول في إجراء الصيانة المطلوبة.' }
+                ],
+                splashImageUrl: 'https://placehold.co/250x250/EAC696/ffffff?text=ABATTOIR+KPI',
+            },
+            reports: [], // بيانات التقارير اليومية
+            approvedReports: [] // التقارير المعتمدة
+        };
+
+        // تجميع المؤشرات حسب الفئة لسهولة بناء الجدول
+        const KPI_CATEGORIES = {
+            'الإدارة': [],
+            'الذبح': [],
+            'النظافة والصحة': [],
+            'الصيانة': []
+        };
+        DATA.settings.kpis.forEach(kpi => {
+            if (KPI_CATEGORIES[kpi.category]) {
+                KPI_CATEGORIES[kpi.category].push(kpi);
+            }
+        });
+        
+        const mainContent = document.getElementById('main-content');
+        const headerTitle = document.getElementById('header-title');
+        const navbar = document.getElementById('navbar');
+        const appHeader = document.getElementById('app-header');
+        const appModalContainer = document.getElementById('appModal');
+
+
+        // === 2. وظائف إدارة البيانات (Local Storage) ===
+
+        function loadData() {
+            try {
+                const storedData = localStorage.getItem(LS_KEY);
+                if (storedData) {
+                    const loadedData = JSON.parse(storedData);
+                    // دمج البيانات المحفوظة مع القيم الافتراضية
+                    DATA.settings = { ...DATA.settings, ...loadedData.settings };
+                    DATA.reports = loadedData.reports || [];
+                    DATA.approvedReports = loadedData.approvedReports || [];
+                }
+            } catch (error) {
+                console.error('Error loading data from Local Storage:', error);
+            }
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem(LS_KEY, JSON.stringify(DATA));
+            } catch (error) {
+                console.error('Error saving data to Local Storage:', error);
+            }
+        }
+
+        // === 3. وظائف التنقل وعرض الشاشات ===
+
+        function navigate(screen, params = {}) {
+            APP_STATE.currentScreen = screen;
+            mainContent.innerHTML = '';
+            appHeader.classList.remove('hidden');
+
+            switch (screen) {
+                case 'login':
+                    appHeader.classList.add('hidden');
+                    showLoginScreen();
+                    break;
+                case 'dashboard':
+                    showDashboard();
+                    break;
+                case 'dailyEvaluation':
+                    showDailyEvaluation(params.date);
+                    break;
+                case 'monthlyKPI':
+                    showMonthlyKPI();
+                    break;
+                case 'violations':
+                    showViolations();
+                    break;
+                case 'monthlyInvoice':
+                    showMonthlyInvoice();
+                    break;
+                case 'settings':
+                    showSettings();
+                    break;
+                default:
+                    showDashboard();
+            }
+            saveCurrentState();
+        }
+
+        function setupHeaderAndNav(title) {
+            headerTitle.textContent = title;
+            navbar.innerHTML = '';
+
+            // حساب عدد التقارير غير المعتمدة للإشعارات
+            const pendingApprovalCount = getPendingApprovalCount();
+
+            const links = [
+                { name: 'الرئيسية', screen: 'dashboard', roles: ['admin', 'user', 'approver'] },
+                { name: 'تقييم يومي', screen: 'dailyEvaluation', roles: ['admin', 'user'] },
+                { 
+                    name: 'مؤشر شهري', 
+                    screen: 'monthlyKPI', 
+                    roles: ['admin', 'user', 'approver'],
+                    notification: APP_STATE.isApprover ? pendingApprovalCount.kpi : 0
+                },
+                { name: 'المخالفات', screen: 'violations', roles: ['admin', 'user'] },
+                { 
+                    name: 'الفاتورة', 
+                    screen: 'monthlyInvoice', 
+                    roles: ['admin', 'user', 'approver'],
+                    notification: APP_STATE.isApprover ? pendingApprovalCount.invoice : 0
+                },
+                { name: 'الإعدادات', screen: 'settings', roles: ['admin'] },
+                { name: `تسجيل الخروج`, screen: 'login', roles: ['admin', 'user', 'approver'], action: logout }
+            ];
+
+            links.filter(link => link.roles.includes(APP_STATE.loggedInUser.role)).forEach(link => {
+                const button = document.createElement('button');
+                button.className = 'app-btn p-2 text-sm relative';
+                button.textContent = link.name;
+                button.onclick = link.action || (() => navigate(link.screen));
+                
+                // إضافة إشعار إذا كان هناك تقارير بانتظار الاعتماد
+                if (link.notification && link.notification > 0) {
+                    const badge = document.createElement('span');
+                    badge.className = 'notification-badge';
+                    badge.textContent = link.notification;
+                    button.appendChild(badge);
+                }
+                
+                navbar.appendChild(button);
+            });
+        }
+
+        function getPendingApprovalCount() {
+            const currentMonth = new Date().toISOString().substring(0, 7);
+            const kpiPending = DATA.reports.filter(r => 
+                r.date.startsWith(currentMonth) && 
+                !DATA.approvedReports.some(ar => ar.reportId === r.id && ar.type === 'kpi')
+            ).length;
+            
+            const invoicePending = DATA.reports.filter(r => 
+                r.date.startsWith(currentMonth) && 
+                !DATA.approvedReports.some(ar => ar.reportId === r.id && ar.type === 'invoice')
+            ).length;
+            
+            return { kpi: kpiPending, invoice: invoicePending };
+        }
+
+        function logout() {
+            APP_STATE.loggedInUser = null;
+            APP_STATE.isAdmin = false;
+            APP_STATE.isApprover = false;
+            APP_STATE.currentSite = null;
+            navigate('login');
+        }
+
+        // حفظ وتحميل حالة التطبيق
+        function saveCurrentState() {
+            const stateToSave = {
+                currentScreen: APP_STATE.currentScreen,
+                loggedInUserId: APP_STATE.loggedInUser ? APP_STATE.loggedInUser.id : null
+            };
+            localStorage.setItem('app_state', JSON.stringify(stateToSave));
+        }
+
+        function loadCurrentState() {
+            const savedState = localStorage.getItem('app_state');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                const user = DATA.settings.users.find(u => u.id === state.loggedInUserId);
+                if (user) {
+                    loginUser(user);
+                    navigate(state.currentScreen);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // === 4. شاشة الترحيب وتسجيل الدخول ===
+
+        function showSplashScreen() {
+            mainContent.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-screen">
+                    <img src="${DATA.settings.splashImageUrl}" alt="شعار البرنامج" class="rounded-lg shadow-xl" style="width: 250px; height: 250px;">
+                    <p class="mt-6 text-2xl text-amber-900 font-extrabold">برنامج مؤشر أداء المشغل</p>
+                </div>
+            `;
+            setTimeout(() => {
+                navigate('login');
+            }, 1300);
+        }
+
+        function loginUser(user) {
+            APP_STATE.loggedInUser = user;
+            APP_STATE.isAdmin = user.role === 'admin';
+            APP_STATE.isApprover = user.role === 'approver';
+            // إذا لم يكن أدمن، يتم تحديد موقعه المعني فقط
+            APP_STATE.currentSite = DATA.settings.sites.find(s => APP_STATE.isAdmin ? s.id === (user.siteId || DATA.settings.sites[0]?.id) : s.id === user.siteId);
+            APP_STATE.isAuthReady = true;
+        }
+
+        function showLoginScreen() {
+            mainContent.innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-screen">
+                    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
+                        <h2 class="text-3xl font-bold text-center mb-6 text-amber-800">تسجيل الدخول</h2>
+                        <div class="mb-4">
+                            <label for="employeeId" class="block text-sm font-medium text-gray-700 mb-2">الرقم الوظيفي</label>
+                            <input type="number" id="employeeId" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-lg text-center" placeholder="أدخل رقمك الوظيفي" required>
+                        </div>
+                        <button id="loginBtn" class="app-btn w-full mt-4 text-lg">دخول</button>
+                        <p id="loginMessage" class="mt-4 text-center text-red-600 hidden">الرقم الوظيفي غير صحيح أو غير موجود.</p>
+                        <p class="mt-6 text-center text-sm text-gray-500">أرقام تجريبية: 70062 (أدمن), 70060 (مستخدم), 80000 (معتمد)</p>
+                    </div>
+                </div>
+            `;
+            document.getElementById('loginBtn').addEventListener('click', () => {
+                const id = document.getElementById('employeeId').value.trim();
+                const user = DATA.settings.users.find(u => u.id === id);
+
+                if (user) {
+                    loginUser(user);
+                    navigate('dashboard');
+                } else {
+                    document.getElementById('loginMessage').classList.remove('hidden');
+                }
+            });
+        }
+
+        // === 5. شاشة لوحة التحكم ===
+
+        function showDashboard() {
+            setupHeaderAndNav('لوحة التحكم');
+
+            const allowedSites = APP_STATE.isAdmin ? DATA.settings.sites : [APP_STATE.currentSite];
+            const siteInfo = allowedSites.map(site => `
+                <div class="p-6 bg-white rounded-xl shadow-lg border border-gray-200">
+                    <h3 class="text-xl font-semibold text-amber-800">${site.name}</h3>
+                    <p class="text-gray-600 mt-2">المشغل: ${site.operator}</p>
+                    <p class="text-gray-600">رقم العقد: ${site.contract}</p>
+                </div>
+            `).join('');
+
+            // إشعارات للمعتمد
+            const approvalNotifications = APP_STATE.isApprover ? `
+                <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <h3 class="text-xl font-semibold text-yellow-800 mb-2">إشعارات الاعتماد</h3>
+                    <div class="space-y-2">
+                        ${getPendingApprovalNotifications()}
+                    </div>
+                </div>
+            ` : '';
+
+            mainContent.innerHTML = `
+                <div class="space-y-8">
+                    <h2 class="text-3xl font-extrabold text-amber-900">مرحباً بك، ${APP_STATE.loggedInUser.name}</h2>
+                    
+                    ${APP_STATE.isApprover ? `
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <button onclick="navigate('monthlyKPI')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
+                                عرض مؤشر الأداء الشهري
+                                ${getPendingApprovalCount().kpi > 0 ? `<span class="notification-badge">${getPendingApprovalCount().kpi}</span>` : ''}
+                            </button>
+                            <button onclick="navigate('monthlyInvoice')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
+                                عرض الفاتورة الشهرية
+                                ${getPendingApprovalCount().invoice > 0 ? `<span class="notification-badge">${getPendingApprovalCount().invoice}</span>` : ''}
+                            </button>
+                        </div>
+                    ` : `
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <button onclick="navigate('dailyEvaluation')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">بدء تقييم يومي</button>
+                            <button onclick="navigate('monthlyKPI')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">مؤشر الأداء الشهري</button>
+                            <button onclick="navigate('violations')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">مخالفات المقاول</button>
+                        </div>
+                    `}
+
+                    <h3 class="text-2xl font-semibold text-amber-800 border-b pb-2">المواقع المخصصة لك</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        ${siteInfo}
+                    </div>
+                    
+                    ${approvalNotifications}
+                </div>
+            `;
+        }
+
+        function getPendingApprovalNotifications() {
+            const currentMonth = new Date().toISOString().substring(0, 7);
+            const pendingKPI = DATA.reports.filter(r => 
+                r.date.startsWith(currentMonth) && 
+                !DATA.approvedReports.some(ar => ar.reportId === r.id && ar.type === 'kpi')
+            );
+            
+            const pendingInvoices = DATA.reports.filter(r => 
+                r.date.startsWith(currentMonth) && 
+                !DATA.approvedReports.some(ar => ar.reportId === r.id && ar.type === 'invoice')
+            );
+            
+            let notifications = '';
+            
+            if (pendingKPI.length > 0) {
+                notifications += `<p class="text-yellow-700">• لديك ${pendingKPI.length} تقرير أداء شهري بانتظار الاعتماد</p>`;
+            }
+            
+            if (pendingInvoices.length > 0) {
+                notifications += `<p class="text-yellow-700">• لديك ${pendingInvoices.length} فاتورة شهرية بانتظار الاعتماد</p>`;
+            }
+            
+            if (notifications === '') {
+                notifications = '<p class="text-green-700">• لا توجد تقارير بانتظار الاعتماد</p>';
+            }
+            
+            return notifications;
+        }
+
+        // === 6. شاشة التقييم اليومي ===
+        
+        // وظيفة مساعدة لإيجاد تقرير ليوم معين وموقع معين
+        function getReport(date, siteId) {
+            return DATA.reports.find(r => r.date === date && r.siteId === siteId);
+        }
+
+        // وظيفة عرض رسالة التأكيد العابرة (Toast)
+        function showSuccessToast(message) {
+            const toastEl = document.getElementById('submission-message');
+            if (toastEl) {
+                toastEl.textContent = message;
+                toastEl.classList.remove('hidden', 'opacity-0');
+                toastEl.classList.add('opacity-100');
+
+                // إخفاء الرسالة بعد 3 ثوانٍ
+                setTimeout(() => {
+                    toastEl.classList.remove('opacity-100');
+                    toastEl.classList.add('opacity-0');
+                    // إخفاء العنصر بالكامل بعد انتهاء التلاشي (transition)
+                    setTimeout(() => {
+                        toastEl.classList.add('hidden');
+                    }, 500);
+                }, 3000);
+            }
+        }
+
+        function showDailyEvaluation(date = new Date().toISOString().split('T')[0]) {
+            setupHeaderAndNav('التقييم اليومي');
+            APP_STATE.currentReportDate = date;
+
+            const site = APP_STATE.currentSite; // الموقع المخصص للمستخدم الحالي
+            const currentReport = getReport(date, site.id);
+            const notes = currentReport ? currentReport.notes : '';
+            
+            // تهيئة المخالفات، إذا كان هناك تقرير سابق نستخدم مخالفاته، وإلا نبدأ بقائمة فارغة
+            const existingViolations = currentReport ? currentReport.violations : [];
+
+            const siteStaff = site.staff;
+            const kpiIndicators = DATA.settings.kpis;
+            
+            // بداية الحل لمشكلة التنسيق: إضافة div لتغليف الجدول وضمان التمرير الأفقي
+            let tableHTML = `
+                <div class="overflow-x-auto rounded-lg shadow-xl border border-gray-300">
+                <table class="min-w-max bg-white table-auto">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="py-3 px-4 border-b text-right text-sm font-semibold text-gray-700 sticky right-0 bg-gray-100 z-[5]" style="min-width: 150px;">مؤشر التقييم</th>
+            `;
+
+            // إضافة أعمدة لكل عامل مع اسمه ووظيفته
+            siteStaff.forEach(staff => {
+                const bgColorClass = staff.role === 'مشرف' ? 'bg-supervisor' :
+                                     staff.role === 'محاسب' ? 'bg-accountant' :
+                                     staff.role === 'قصاب' ? 'bg-butcher' :
+                                     staff.role === 'عامل نظافة' ? 'bg-cleaner' : 'bg-gray-200';
+                tableHTML += `<th class="py-3 px-4 border-b text-center text-sm font-semibold text-gray-700 ${bgColorClass}" style="min-width: 120px;">${staff.name}<br>(${staff.role})</th>`;
+            });
+
+            tableHTML += `
+                        </tr>
+                    </thead>
+                    <tbody id="evaluation-body">
+            `;
+
+            kpiIndicators.forEach((kpi, kpiIndex) => {
+                const kpiName = kpi.name;
+                const requiredWorkers = kpi.workers;
+                
+                tableHTML += `
+                    <tr class="hover:bg-gray-50">
+                        <td class="py-3 px-4 border-b text-right font-medium text-gray-800 sticky right-0 bg-white" style="min-width: 150px;">${kpiName}</td>
+                `;
+
+                siteStaff.forEach(staff => {
+                    const isRequired = requiredWorkers.includes(staff.role);
+                    
+                    // لا نضع مربعات اختيار إذا كان العامل غير مطلوب لهذا المؤشر
+                    if (!isRequired) {
+                        tableHTML += `<td class="py-3 px-4 border-b text-center text-gray-400">-</td>`;
+                    } else {
+                        const workerKey = staff.id;
+                        const oldKpiIndex = DATA.settings.kpis.findIndex(k => k.name === kpiName);
+                        const isChecked = currentReport ? (currentReport.scores[oldKpiIndex]?.[workerKey] || false) : true;
+                        
+                        tableHTML += `
+                            <td class="py-3 px-4 border-b text-center">
+                                <div class="flex items-center justify-center p-1">
+                                    <input type="checkbox" data-kpi-index="${oldKpiIndex}" data-worker-key="${workerKey}"
+                                        class="form-checkbox h-5 w-5 text-amber-600 rounded" ${isChecked ? 'checked' : ''}>
+                                </div>
+                            </td>
+                        `;
+                    }
+                });
+
+                tableHTML += `</tr>`;
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-xl font-semibold text-amber-800 mb-3">ملاحظات يومية</h3>
+                    <textarea id="dailyNotes" rows="4" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500" placeholder="سجل الملاحظات اليومية هنا">${notes}</textarea>
+                </div>
+
+                <div class="mt-6 p-4 border border-red-300 bg-red-50 rounded-lg">
+                    <h3 class="text-xl font-semibold text-red-700 mb-3">تسجيل مخالفات المقاول</h3>
+                    <div id="violation-list" class="space-y-3">
+                        <!-- قائمة المخالفات المسجلة حالياً -->
+                    </div>
+                    <button onclick="addViolationRow()" class="mt-3 app-btn bg-red-500 hover:bg-red-600 text-sm">إضافة مخالفة جديدة</button>
+                    <p id="violation-warning" class="mt-4 text-red-600 font-medium hidden">⚠️ لا يمكن تقديم التقرير بنسبة أداء أقل من 100% دون تسجيل مخالفة أو كتابة ملاحظة دون أي إجراء.</p>
+                </div>
+
+                <div class="mt-8 relative flex justify-between space-x-4 space-x-reverse">
+                    <!-- رسالة التأكيد العابرة -->
+                    <div id="submission-message" class="absolute hidden opacity-0 transition-opacity duration-500 bg-green-500 text-white py-2 px-4 rounded-lg font-bold shadow-lg top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-2">
+                        تم التقديم بنجاح
+                    </div>
+
+                    <button onclick="navigate('dashboard')" class="app-btn bg-gray-500 hover:bg-gray-600">رجوع</button>
+                    <button id="monthlyKPIBtn" onclick="navigate('monthlyKPI')" class="app-btn bg-amber-500 hover:bg-amber-600">مؤشر الأداء الشهري</button>
+                    <button id="submitReportBtn" class="app-btn bg-green-600 hover:bg-green-700">تقديم التقييم</button>
+                </div>
+            `;
+
+            mainContent.innerHTML = `
+                <div class="space-y-6">
+                    <div class="flex flex-wrap items-center justify-between mb-4 p-4 bg-amber-50 rounded-xl shadow-md">
+                        <p class="text-lg font-medium text-amber-800">الموقع: <b>${site.name}</b></p>
+                        <p class="text-lg font-medium text-amber-800">المقاول: <b>${site.operator}</b></p>
+                        <label class="flex items-center space-x-2 space-x-reverse text-lg font-medium text-amber-800">
+                            التاريخ:
+                            <input type="date" id="reportDate" value="${date}" onchange="changeReportDate(this.value)" class="p-2 border rounded-lg">
+                        </label>
+                    </div>
+                    ${tableHTML}
+                </div>
+            `;
+
+            // عرض المخالفات المسجلة مسبقاً
+            const violationList = document.getElementById('violation-list');
+            existingViolations.forEach(v => {
+                violationList.innerHTML += createViolationRow(v.violationId, v.notes || '', v.id);
+            });
+
+            // ربط زر التقديم بالوظيفة
+            document.getElementById('submitReportBtn').addEventListener('click', handleSubmitReport);
+        }
+
+        function changeReportDate(newDate) {
+            APP_STATE.currentReportDate = newDate;
+            navigate('dailyEvaluation', { date: newDate });
+        }
+
+        function createViolationRow(violationId, notes = '', uniqueId = crypto.randomUUID()) {
+            const violation = DATA.settings.violations.find(v => v.id == violationId) || {};
+            const violationOptions = DATA.settings.violations.map(v => 
+                `<option value="${v.id}" ${v.id == violationId ? 'selected' : ''}>${v.name} (خصم: ${v.value} درهم)</option>`
+            ).join('');
+
+            return `
+                <div class="flex flex-col md:flex-row items-start md:items-center space-y-2 md:space-y-0 md:space-x-4 md:space-x-reverse p-3 border border-red-200 bg-white rounded-lg violation-row" data-violation-id="${violationId}" data-unique-id="${uniqueId}">
+                    <select class="w-full md:w-1/3 p-2 border rounded-lg text-sm text-red-800 font-medium">
+                        ${violationOptions}
+                    </select>
+                    <textarea class="w-full md:w-2/3 p-2 border rounded-lg text-sm" placeholder="ملاحظة خاصة بالمخالفة (اختياري)">${notes}</textarea>
+                    <button onclick="removeViolationRow(this)" class="app-btn bg-red-400 hover:bg-red-500 p-2 text-xs flex-shrink-0">حذف</button>
+                </div>
+            `;
+        }
+
+        function addViolationRow() {
+            const violationList = document.getElementById('violation-list');
+            const newViolationId = DATA.settings.violations[0]?.id || 1; 
+            violationList.innerHTML += createViolationRow(newViolationId);
+        }
+
+        function removeViolationRow(btn) {
+            btn.closest('.violation-row').remove();
+        }
+
+        function calculateDailyKPI() {
+            const checkboxes = mainContent.querySelectorAll('#evaluation-body input[type="checkbox"]');
+            let totalPossibleScore = 0;
+            let actualScore = 0;
+
+            const scores = {};
+            const siteStaff = APP_STATE.currentSite.staff;
+            
+            // حساب العدد الكلي للنقاط الممكنة (عدد المؤشرات * عدد العمال المعنيين)
+            DATA.settings.kpis.forEach((kpi, kpiIndex) => {
+                kpi.workers.forEach(requiredRole => {
+                    siteStaff.forEach(staff => {
+                        if (staff.role === requiredRole) {
+                            totalPossibleScore++;
+                        }
+                    });
+                });
+            });
+
+            // حساب النقاط الفعلية
+            checkboxes.forEach(cb => {
+                const kpiIndex = parseInt(cb.dataset.kpiIndex);
+                const workerKey = cb.dataset.workerKey;
+
+                if (!scores[kpiIndex]) scores[kpiIndex] = {};
+
+                if (cb.checked) {
+                    actualScore++;
+                    scores[kpiIndex][workerKey] = true;
+                } else {
+                    scores[kpiIndex][workerKey] = false;
+                }
+            });
+
+            const percentage = totalPossibleScore > 0 ? (actualScore / totalPossibleScore) * 100 : 0;
+            return { percentage, scores, totalPossibleScore, actualScore };
+        }
+
+        function handleSubmitReport() {
+            const { percentage, scores } = calculateDailyKPI();
+            const dailyNotes = document.getElementById('dailyNotes').value.trim();
+            const currentSiteId = APP_STATE.currentSite.id;
+            const reportDate = APP_STATE.currentReportDate;
+
+            const violationRows = mainContent.querySelectorAll('.violation-row');
+            const newViolations = Array.from(violationRows).map(row => {
+                const selectedViolationId = row.querySelector('select').value;
+                const notes = row.querySelector('textarea').value;
+                const violationData = DATA.settings.violations.find(v => v.id == selectedViolationId) || {};
+
+                return {
+                    id: row.dataset.uniqueId,
+                    violationId: parseInt(selectedViolationId),
+                    name: violationData.name,
+                    value: violationData.value,
+                    notes: notes,
+                    isClosed: false,
+                    reportDate: reportDate,
+                    siteId: currentSiteId,
+                };
+            });
+
+            // شرط التقديم الإجباري
+            const warningEl = document.getElementById('violation-warning');
+            if (percentage < 100 && newViolations.length === 0 && dailyNotes !== 'ملاحظة دون أي اجراء') {
+                warningEl.classList.remove('hidden');
+                return;
+            } else {
+                warningEl.classList.add('hidden');
+            }
+
+            // إنشاء/تحديث التقرير
+            const reportIndex = DATA.reports.findIndex(r => r.date === reportDate && r.siteId === currentSiteId);
+
+            const reportData = {
+                id: crypto.randomUUID(),
+                userId: APP_STATE.loggedInUser.id,
+                userName: APP_STATE.loggedInUser.name,
+                siteId: currentSiteId,
+                date: reportDate,
+                notes: dailyNotes,
+                scores: scores,
+                kpiPercentage: percentage.toFixed(2),
+                violations: newViolations,
+            };
+
+            if (reportIndex !== -1) {
+                DATA.reports[reportIndex] = reportData;
+            } else {
+                DATA.reports.push(reportData);
+            }
+
+            saveData();
+            showSuccessToast('تم التقديم بنجاح');
+        }
+
+        // === 7. شاشة المخالفات ===
+
+        function showViolations() {
+            setupHeaderAndNav('شاشة مخالفات المقاول');
+
+            let allViolations = DATA.reports.flatMap(r => r.violations.map(v => ({
+                ...v,
+                reportId: r.id,
+                reportDate: r.date,
+                siteName: DATA.settings.sites.find(s => s.id === r.siteId)?.name || 'غير معروف',
+            })));
+
+            // تصفية حسب صلاحية المستخدم
+            if (!APP_STATE.isAdmin) {
+                allViolations = allViolations.filter(v => v.siteId === APP_STATE.loggedInUser.siteId);
+            }
+            
+            // ترتيب المخالفات (المفتوحة أولاً)
+            allViolations.sort((a, b) => a.isClosed - b.isClosed);
+
+            const openViolations = allViolations.filter(v => !v.isClosed);
+
+            const renderViolationsTable = (violations) => {
+                if (violations.length === 0) {
+                    return `<p class="text-center text-gray-500 py-4">لا توجد مخالفات في النظام حسب صلاحياتك.</p>`;
+                }
+                return `
+                    <div class="overflow-x-auto">
+                    <table class="min-w-max bg-white border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="py-3 px-4 border-b text-right">التاريخ</th>
+                                <th class="py-3 px-4 border-b text-right">الموقع</th>
+                                <th class="py-3 px-4 border-b text-right">المخالفة</th>
+                                <th class="py-3 px-4 border-b text-right">قيمة الخصم</th>
+                                <th class="py-3 px-4 border-b text-right">الحالة</th>
+                                <th class="py-3 px-4 border-b text-center">الإجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${violations.map(v => {
+                                const status = v.isClosed ? 'مغلقة' : 'مفتوحة';
+                                const statusClass = v.isClosed ? 'text-green-600' : 'text-red-600 font-bold';
+                                return `
+                                    <tr class="hover:bg-gray-50 ${v.isClosed ? 'opacity-75' : ''}">
+                                        <td class="py-2 px-4 border-b">${v.reportDate}</td>
+                                        <td class="py-2 px-4 border-b">${v.siteName}</td>
+                                        <td class="py-2 px-4 border-b font-medium text-red-700">${v.name}</td>
+                                        <td class="py-2 px-4 border-b">${v.value.toLocaleString('ar-EG')}</td>
+                                        <td class="py-2 px-4 border-b ${statusClass}">${status}</td>
+                                        <td class="py-2 px-4 border-b text-center">
+                                            ${!v.isClosed ?
+                                                `<button onclick="closeViolation('${v.reportId}', '${v.id}')" class="app-btn bg-green-500 hover:bg-green-600 p-2 text-sm">إغلاق ومعالجة</button>`
+                                                : `-`}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    </div>
+                `;
+            };
+
+            const notification = openViolations.length > 0 ?
+                `<div class="p-4 bg-red-100 text-red-800 rounded-lg font-semibold mb-4">⚠️ لديك ${openViolations.length} مخالفة مفتوحة تتطلب المعالجة.</div>` :
+                `<div class="p-4 bg-green-100 text-green-800 rounded-lg font-semibold mb-4">لا توجد مخالفات مفتوحة حالياً.</div>`;
+
+            mainContent.innerHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-amber-900">إدارة مخالفات المقاول</h2>
+                    ${notification}
+
+                    <div class="space-y-4">
+                        <h3 class="text-2xl font-semibold text-amber-800 border-b pb-2">قائمة المخالفات (تظهر فقط التي تم رصدها)</h3>
+                        ${renderViolationsTable(allViolations)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeViolation(reportId, violationId) {
+            const report = DATA.reports.find(r => r.id === reportId);
+            if (report) {
+                const violation = report.violations.find(v => v.id === violationId);
+                if (violation) {
+                    violation.isClosed = true;
+                    saveData();
+                    showModal('تم الإغلاق', 'تم إغلاق المخالفة بنجاح وستخصم من الفاتورة الشهرية.', 'violations');
+                    return;
+                }
+            }
+            showModal('خطأ', 'لم يتم العثور على المخالفة لإغلاقها.', 'violations');
+        }
+
+        // === 8. شاشة مؤشر الأداء الشهري (تعديل الهيكل) ===
+
+        function showMonthlyKPI() {
+            setupHeaderAndNav('مؤشر الأداء الشهري');
+
+            const isApprover = APP_STATE.isApprover;
+            const sitesToView = APP_STATE.isAdmin || isApprover ? DATA.settings.sites : [APP_STATE.currentSite];
+
+            let contentHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-amber-900">تقرير مؤشر الأداء الشهري</h2>
+                    
+                    <div class="flex flex-wrap items-center space-x-4 space-x-reverse gap-4 p-4 bg-amber-50 rounded-xl shadow-md">
+                        ${(APP_STATE.isAdmin || isApprover) ? `
+                            <label for="site-select-kpi" class="font-semibold text-amber-800">اختر المسلخ:</label>
+                            <select id="site-select-kpi" class="p-2 border rounded-lg" onchange="renderKPIReport(this.value, document.getElementById('month-select-kpi').value)">
+                                ${sitesToView.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+                        ` : `<input type="hidden" id="site-select-kpi" value="${APP_STATE.currentSite.id}">`}
+
+                        <label for="month-select-kpi" class="font-semibold text-amber-800">اختر الشهر:</label>
+                        <input type="month" id="month-select-kpi" value="${new Date().toISOString().substring(0, 7)}" class="p-2 border rounded-lg" onchange="renderKPIReport(document.getElementById('site-select-kpi').value, this.value)">
+                        <button onclick="exportKPIReportToPDF()" class="app-btn text-sm">تصدير التقرير (PDF)</button>
+                        ${APP_STATE.isApprover ? `<button onclick="approveKPIReport()" class="app-btn bg-green-600 text-sm">اعتماد التقرير</button>` : ''}
+                    </div>
+
+                    <div id="kpi-report-content" class="bg-white p-6 rounded-xl shadow-2xl overflow-x-auto">
+                        <!-- محتوى التقرير يظهر هنا -->
+                    </div>
+                </div>
+            `;
+            mainContent.innerHTML = contentHTML;
+
+            const initialSiteId = sitesToView[0].id;
+            renderKPIReport(initialSiteId, document.getElementById('month-select-kpi').value);
+        }
+
+        // دالة مساعدة لحساب متوسط KPI لفئة معينة
+        function calculateCategoryKPI(reports, kpisInCategory, siteStaff) {
+            let categoryTotalScore = 0;
+            let categoryPossibleScore = 0;
+            let totalDays = reports.length;
+
+            if (totalDays === 0) return 0;
+
+            reports.forEach(report => {
+                kpisInCategory.forEach(kpi => {
+                    const kpiIndex = DATA.settings.kpis.findIndex(k => k.name === kpi.name);
+                    
+                    kpi.workers.forEach(requiredRole => {
+                        siteStaff.forEach(staff => {
+                            if (staff.role === requiredRole) {
+                                categoryPossibleScore++;
+                                const workerKey = staff.id;
+                                if (report.scores[kpiIndex] && report.scores[kpiIndex][workerKey]) {
+                                    categoryTotalScore++;
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+
+            return categoryPossibleScore > 0 ? ((categoryTotalScore / categoryPossibleScore) * 100).toFixed(2) : '100.00';
+        }
+
+        function renderKPIReport(siteId, monthYear) {
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const siteStaff = site.staff;
+
+            const filteredReports = DATA.reports.filter(r =>
+                r.siteId === siteId &&
+                r.date.startsWith(monthYear)
+            );
+            const totalDays = filteredReports.length;
+            const operatorName = site.operator;
+            
+            // الحصول على اسم المستخدم المدخل للبيانات في آخر يوم من الشهر
+            const lastDayOfMonth = new Date(new Date(monthYear).getFullYear(), new Date(monthYear).getMonth() + 1, 0).getDate();
+            const lastDayReport = filteredReports
+                .filter(r => r.date === `${monthYear}-${lastDayOfMonth.toString().padStart(2, '0')}`)
+                .pop();
+            const dataEntryUser = lastDayReport ? lastDayReport.userName : 'غير معروف';
+            
+            // التحقق مما إذا كان التقرير معتمداً
+            const isApproved = DATA.approvedReports.some(ar => 
+                ar.siteId === siteId && 
+                ar.monthYear === monthYear && 
+                ar.type === 'kpi'
+            );
+            
+            let totalOverallPercentage = 0;
+            let totalCategories = 0;
+            let tableHTML = '';
+
+            tableHTML += `
+                <div id="kpi-report-printable" class="p-2 border-2 border-amber-800 rounded-lg bg-white shadow-xl" style="min-width: 1000px;">
+                    <h3 class="text-3xl font-extrabold text-center text-amber-900 my-4">المؤشرات الرئيسية للأداء</h3>
+                    <div class="flex justify-between items-center text-sm mb-4 border-b pb-2 font-medium">
+                        <p>المسلخ: <span class="text-amber-700 font-bold">${site.name}</span></p>
+                        <p>المقاول: <span class="text-amber-700 font-bold">${operatorName}</span></p>
+                        <p>الشهر: <span class="text-amber-700 font-bold">${monthYear}</span></p>
+                        <p>عدد التقارير اليومية المدخلة: <span class="text-amber-700 font-bold">${totalDays}</span></p>
+                        <p>المدخل: <span class="text-amber-700 font-bold">${dataEntryUser}</span></p>
+                        <p>الحالة: <span class="text-amber-700 font-bold">${isApproved ? 'معتمد' : 'غير معتمد'}</span></p>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-400 text-sm">
+                        <thead class="bg-amber-300">
+                            <tr>
+                                <th class="border px-3 py-2 text-right w-1/4">البند الرئيسي</th>
+                                <th class="border px-3 py-2 text-right w-1/3">البند الفرعي/مؤشر التقييم</th>
+                                <th class="border px-3 py-2 w-1/4">مؤشرات الأداء للمقاول (%)</th>
+                                <th class="border px-3 py-2 w-1/6">النسبة المئوية لجودة الأداء (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            // تجميع المؤشرات وإظهارها بالتفصيل
+            Object.keys(KPI_CATEGORIES).forEach(category => {
+                const kpisInCategory = KPI_CATEGORIES[category];
+                if (kpisInCategory.length === 0) return;
+
+                // حساب مؤشر الأداء الشهري للقسم الرئيسي
+                const categoryKPI = calculateCategoryKPI(filteredReports, kpisInCategory, siteStaff);
+                totalOverallPercentage += parseFloat(categoryKPI);
+                totalCategories++;
+
+                kpisInCategory.forEach((kpi, index) => {
+                    const kpiIndex = DATA.settings.kpis.findIndex(k => k.name === kpi.name);
+                    const kpiWorkers = kpi.workers.filter(w => siteStaff.some(s => s.role === w));
+                    
+                    // حساب النسبة اليومية لهذا المؤشر
+                    let kpiTotalScore = 0;
+                    let kpiPossibleScore = 0;
+
+                    filteredReports.forEach(report => {
+                         kpiWorkers.forEach(requiredRole => {
+                            siteStaff.forEach(staff => {
+                                if (staff.role === requiredRole) {
+                                    kpiPossibleScore++;
+                                    const workerKey = staff.id;
+                                    if (report.scores[kpiIndex] && report.scores[kpiIndex][workerKey]) {
+                                        kpiTotalScore++;
+                                    }
+                                }
+                            });
+                        });
+                    });
+
+                    const kpiPercentage = kpiPossibleScore > 0 ? ((kpiTotalScore / kpiPossibleScore) * 100).toFixed(2) : '100.00';
+
+                    tableHTML += `
+                        <tr>
+                            ${index === 0 ? `<td rowspan="${kpisInCategory.length}" class="border px-3 py-2 text-right font-bold bg-amber-100 align-top">${category}</td>` : ''}
+                            <td class="border px-3 py-2 text-right">${kpi.name}</td>
+                            <td class="border px-3 py-2 text-center text-blue-700">${kpiPercentage}%</td>
+                            <td class="border px-3 py-2 text-center text-gray-500">-</td>
+                        </tr>
+                    `;
+                });
+                
+                // إضافة صف المجموع الفرعي لكل فئة
+                tableHTML += `
+                    <tr class="font-bold bg-amber-200">
+                        <td colspan="3" class="border px-3 py-2 text-left">مؤشر أداء ${category}</td>
+                        <td class="border px-3 py-2 text-center text-lg ${categoryKPI >= 95 ? 'text-green-700' : 'text-red-700'}">${categoryKPI}%</td>
+                    </tr>
+                `;
+            });
+
+            const overallKPI = totalCategories > 0 ? (totalOverallPercentage / totalCategories).toFixed(2) : '0.00';
+
+            // إضافة صف الإجمالي النهائي
+            tableHTML += `
+                    <tr class="font-extrabold bg-amber-400 text-lg">
+                        <td colspan="3" class="border px-3 py-2 text-left">مؤشر الأداء الكلي الشهري</td>
+                        <td class="border px-3 py-2 text-center ${overallKPI >= 95 ? 'text-green-800' : 'text-red-800'}">${overallKPI}%</td>
+                    </tr>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
+            `;
+            
+            const content = document.getElementById('kpi-report-content');
+            content.innerHTML = tableHTML;
+        }
+        
+        function approveKPIReport() {
+            const siteId = document.getElementById('site-select-kpi').value;
+            const monthYear = document.getElementById('month-select-kpi').value;
+            
+            const approvalRecord = {
+                id: crypto.randomUUID(),
+                siteId: siteId,
+                monthYear: monthYear,
+                type: 'kpi',
+                approvedBy: APP_STATE.loggedInUser.id,
+                approvedAt: new Date().toISOString(),
+                reportId: DATA.reports.find(r => r.siteId === siteId && r.date.startsWith(monthYear))?.id
+            };
+            
+            DATA.approvedReports.push(approvalRecord);
+            saveData();
+            showModal('تم الاعتماد', 'تم اعتماد تقرير مؤشر الأداء الشهري بنجاح.', 'monthlyKPI');
+        }
+        
+        function exportKPIReportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            
+            const element = document.getElementById('kpi-report-printable');
+            
+            html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                logging: false
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 280;
+                const pageHeight = 200;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+                
+                let position = 10;
+                
+                doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+                
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    doc.addPage();
+                    doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+                
+                doc.save('تقرير_مؤشر_الأداء_الشهري.pdf');
+            });
+        }
+
+        // === 9. شاشة الفاتورة الشهرية ===
+
+        function showMonthlyInvoice() {
+            setupHeaderAndNav('الفاتورة الشهرية للمقاول');
+
+            const isApprover = APP_STATE.isApprover;
+            // تم تعديل الصلاحية: المستخدم العادي يمكنه عرض الفاتورة لموقعه فقط
+            const sitesToView = APP_STATE.isAdmin || isApprover ? DATA.settings.sites : [APP_STATE.currentSite];
+
+            let contentHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-amber-900">إنشاء واعتماد الفاتورة الشهرية</h2>
+                    
+                    <div class="flex flex-wrap items-center space-x-4 space-x-reverse">
+                        ${(APP_STATE.isAdmin || isApprover) ? `
+                            <label for="site-select-invoice" class="font-semibold text-amber-800">اختر المسلخ:</label>
+                            <select id="site-select-invoice" class="p-2 border rounded-lg" onchange="renderInvoice(this.value, document.getElementById('month-select-invoice').value)">
+                                ${sitesToView.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+                        ` : `<input type="hidden" id="site-select-invoice" value="${APP_STATE.currentSite.id}">`}
+
+                        <label for="month-select-invoice" class="font-semibold text-amber-800">اختر الشهر:</label>
+                        <input type="month" id="month-select-invoice" value="${new Date().toISOString().substring(0, 7)}" class="p-2 border rounded-lg" onchange="renderInvoice(document.getElementById('site-select-invoice').value, this.value)">
+                        <button onclick="exportInvoiceToPDF()" class="app-btn text-sm">تصدير الفاتورة (PDF)</button>
+                        ${APP_STATE.isApprover ? `<button onclick="approveInvoice()" class="app-btn bg-green-600 text-sm">اعتماد الفاتورة</button>` : ''}
+                    </div>
+
+                    <div id="invoice-content" class="bg-white p-6 rounded-xl shadow-2xl overflow-x-auto">
+                        <!-- محتوى الفاتورة يظهر هنا -->
+                    </div>
+                </div>
+            `;
+            mainContent.innerHTML = contentHTML;
+
+            const initialSiteId = sitesToView[0].id;
+            renderInvoice(initialSiteId, document.getElementById('month-select-invoice').value);
+        }
+
+        function renderInvoice(siteId, monthYear) {
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const operatorName = site.operator;
+            const contractNumber = site.contract;
+            const invoiceNumber = `INV-${siteId}-${monthYear.replace('-', '')}`;
+            const invoiceDate = new Date().toLocaleDateString('ar-EG');
+            const invoiceCosts = DATA.settings.invoiceCosts;
+            
+            // تحديد المستخدم المعتمد
+            const approverUser = DATA.settings.users.find(u => u.role === 'approver');
+            
+            // الحصول على اسم المستخدم المدخل للبيانات في آخر يوم من الشهر
+            const filteredReports = DATA.reports.filter(r => r.siteId === siteId && r.date.startsWith(monthYear));
+            const lastDayOfMonth = new Date(new Date(monthYear).getFullYear(), new Date(monthYear).getMonth() + 1, 0).getDate();
+            const lastDayReport = filteredReports
+                .filter(r => r.date === `${monthYear}-${lastDayOfMonth.toString().padStart(2, '0')}`)
+                .pop();
+            const dataEntryUser = lastDayReport ? lastDayReport.userName : 'غير معروف';
+            
+            // التحقق مما إذا كان التقرير معتمداً
+            const isApproved = DATA.approvedReports.some(ar => 
+                ar.siteId === siteId && 
+                ar.monthYear === monthYear && 
+                ar.type === 'invoice'
+            );
+            
+            // 1. حساب الإجماليات
+            let itemsTotal = 0;
+            const invoiceItems = ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'مواد التنظيف'];
+            const itemDetails = invoiceItems.map((item, index) => {
+                const count = item === 'مواد التنظيف' ? 1 : site.staff.filter(s => s.role === item).length;
+                const cost = invoiceCosts[item] || 0;
+                const total = count * cost;
+                itemsTotal += total;
+                return { index: index + 1, item, count, cost, total };
+            });
+
+            // 2. حساب الضرائب
+            const taxRate = 0.05;
+            const taxAmount = itemsTotal * taxRate;
+            const totalBeforeAdjustments = itemsTotal + taxAmount;
+
+            // 3. حساب الخصومات والتعديلات (مؤشر الأداء والمخالفات)
+            
+            // حساب مؤشر الأداء الكلي
+            let totalOverallPercentage = 0;
+            let totalCategories = 0;
+            Object.keys(KPI_CATEGORIES).forEach(category => {
+                const kpisInCategory = KPI_CATEGORIES[category];
+                if (kpisInCategory.length === 0) return;
+                const categoryKPI = calculateCategoryKPI(filteredReports, kpisInCategory, site.staff);
+                totalOverallPercentage += parseFloat(categoryKPI);
+                totalCategories++;
+            });
+            const averageKPI = totalCategories > 0 ? (totalOverallPercentage / totalCategories).toFixed(2) : '0.00';
+            
+            // خصم مؤشر الأداء: إذا كان الأداء أقل من 95%، يتم خصم 1% من الإجمالي قبل الضريبة لكل نقطة تحت الـ 95
+            let kpiAdjustment = 0;
+            if (parseFloat(averageKPI) < 95 && filteredReports.length > 0) {
+                const deductionRate = (95 - parseFloat(averageKPI)) / 100;
+                kpiAdjustment = -(itemsTotal * deductionRate);
+            }
+            // تقريب التعديل لأقرب عدد صحيح
+            kpiAdjustment = Math.round(kpiAdjustment);
+
+            // حساب قيمة المخالفات المغلقة
+            const closedViolationsValue = DATA.reports.flatMap(r => r.violations)
+                .filter(v => v.siteId === siteId && v.reportDate.startsWith(monthYear) && v.isClosed)
+                .reduce((sum, v) => sum + v.value, 0);
+
+            // 4. القيمة النهائية
+            const finalValue = totalBeforeAdjustments + kpiAdjustment - closedViolationsValue;
+            
+            // بناء جدول الفاتورة
+            const invoiceTableRows = itemDetails.map(d => `
+                <tr>
+                    <td class="border px-4 py-2">${d.index}</td>
+                    <td class="border px-4 py-2 text-right">${d.item}</td>
+                    <td class="border px-4 py-2 text-center">${d.count}</td>
+                    <td class="border px-4 py-2 text-center">${d.cost.toLocaleString('ar-EG')}</td>
+                    <td class="border px-4 py-2 text-center">${d.total.toLocaleString('ar-EG')}</td>
+                </tr>
+            `).join('');
+
+            const approverSignatureHtml = approverUser.signature ? 
+                `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${approverUser.signature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع"></div>` : 
+                `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">غير معتمد بعد</div>`;
+
+            // تصميم الفاتورة بنسق Landscape
+            const invoiceHTML = `
+                <div id="invoice-printable" class="p-8 border-4 border-amber-800 rounded-2xl shadow-2xl bg-white" style="min-width: 1200px;">
+                    <div class="flex justify-between items-center mb-6 border-b-2 border-amber-500 pb-4">
+                        <img src="${DATA.settings.splashImageUrl}" alt="شعار" class="w-20 h-20 rounded-full">
+                        <h1 class="text-4xl font-extrabold text-amber-900">فاتورة خدمات المقاول الشهرية</h1>
+                        <div class="text-sm text-right">
+                            <p class="font-semibold">رقم الفاتورة: <span class="text-amber-700">${invoiceNumber}</span></p>
+                            <p>تاريخ الفاتورة: <span class="text-amber-700">${invoiceDate}</span></p>
+                            <p>الحالة: <span class="text-amber-700">${isApproved ? 'معتمدة' : 'غير معتمدة'}</span></p>
+                        </div>
+                    </div>
+
+                    <div class="bg-amber-50 p-4 rounded-lg mb-6 text-lg font-medium grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <p>اسم المشغل: <span class="font-bold text-amber-800">${operatorName}</span></p>
+                        <p>الموقع: <span class="font-bold text-amber-800">${site.name}</span></p>
+                        <p>رقم العقد: <span class="font-bold text-amber-800">${contractNumber}</span></p>
+                        <p>الشهر: <span class="font-bold text-amber-800">${monthYear}</span></p>
+                        <p>المدخل: <span class="font-bold text-amber-800">${dataEntryUser}</span></p>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                    <table class="min-w-max border-collapse border border-gray-400 mb-6 text-sm">
+                        <thead class="bg-amber-200">
+                            <tr>
+                                <th class="border px-4 py-2 w-16">الرقم</th>
+                                <th class="border px-4 py-2 text-right">البند</th>
+                                <th class="border px-4 py-2 w-20">العدد</th>
+                                <th class="border px-4 py-2 w-32">المبلغ الشهري</th>
+                                <th class="border px-4 py-2 w-40">الإجمالي الكلي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${invoiceTableRows}
+                            <tr class="font-bold bg-amber-50">
+                                <td colspan="4" class="border px-4 py-2 text-left">المبلغ الكلي قبل الضريبة</td>
+                                <td class="border px-4 py-2 text-center">${itemsTotal.toLocaleString('ar-EG')}</td>
+                            </tr>
+                            <tr class="bg-gray-100">
+                                <td colspan="4" class="border px-4 py-2 text-left">الضريبة (5%)</td>
+                                <td class="border px-4 py-2 text-center">${taxAmount.toLocaleString('ar-EG')}</td>
+                            </tr>
+                            <tr class="font-extrabold bg-green-100">
+                                <td colspan="4" class="border px-4 py-2 text-left">المبلغ الكلي مع الضريبة</td>
+                                <td class="border px-4 py-2 text-center">${totalBeforeAdjustments.toLocaleString('ar-EG')}</td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="border px-4 py-2 text-left text-red-700">مخالفات على المشغل (المخالفات المغلقة)</td>
+                                <td class="border px-4 py-2 text-center text-red-700">(${closedViolationsValue.toLocaleString('ar-EG')})</td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="border px-4 py-2 text-left ${kpiAdjustment > 0 ? 'text-green-700' : 'text-red-700'}">تعديل مؤشر الأداء الشهري (متوسط ${averageKPI}%)</td>
+                                <td class="border px-4 py-2 text-center ${kpiAdjustment >= 0 ? 'text-green-700' : 'text-red-700'}">${kpiAdjustment.toLocaleString('ar-EG', { signDisplay: 'exceptZero' })}</td>
+                            </tr>
+                            <tr class="font-extrabold bg-amber-300 text-2xl">
+                                <td colspan="4" class="border px-4 py-2 text-left">القيمة الكلية النهائية</td>
+                                <td class="border px-4 py-2 text-center">${finalValue.toLocaleString('ar-EG')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    </div>
+
+                    <div class="flex justify-between mt-8 text-center text-base">
+                        <div>
+                            <p class="font-semibold border-b border-gray-400 mb-2">اسم المدخل (المشغل)</p>
+                            <p>${dataEntryUser}</p>
+                        </div>
+                        <div class="flex flex-col">
+                            <p class="font-semibold border-b border-gray-400 mb-2">اعتماد المسؤول (${approverUser.name})</p>
+                            ${APP_STATE.isApprover ? createSignatureArea(approverUser) : approverSignatureHtml}
+                            <p class="text-xs mt-1 text-gray-500">${approverUser.signature ? 'تم الاعتماد' : 'مطلوب توقيع'}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('invoice-content').innerHTML = invoiceHTML;
+            document.getElementById('invoice-print-view').innerHTML = invoiceHTML; 
+        }
+
+        function approveInvoice() {
+            const siteId = document.getElementById('site-select-invoice').value;
+            const monthYear = document.getElementById('month-select-invoice').value;
+            
+            const approvalRecord = {
+                id: crypto.randomUUID(),
+                siteId: siteId,
+                monthYear: monthYear,
+                type: 'invoice',
+                approvedBy: APP_STATE.loggedInUser.id,
+                approvedAt: new Date().toISOString(),
+                reportId: DATA.reports.find(r => r.siteId === siteId && r.date.startsWith(monthYear))?.id
+            };
+            
+            DATA.approvedReports.push(approvalRecord);
+            saveData();
+            showModal('تم الاعتماد', 'تم اعتماد الفاتورة الشهرية بنجاح.', 'monthlyInvoice');
+        }
+
+        function exportInvoiceToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            
+            const element = document.getElementById('invoice-printable');
+            
+            html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                logging: false
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 280;
+                const pageHeight = 200;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                let heightLeft = imgHeight;
+                
+                let position = 10;
+                
+                doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                heightLeft -= pageHeight;
+                
+                while (heightLeft >= 0) {
+                    position = heightLeft - imgHeight;
+                    doc.addPage();
+                    doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+                }
+                
+                doc.save('فاتورة_خدمات_المقاول.pdf');
+            });
+        }
+
+        function createSignatureArea(user) {
+            const signature = user.signature;
+            if (signature) {
+                return `
+                    <div class="mt-2 p-2 border rounded-lg bg-white">
+                        <img id="signatureImage" src="${signature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع">
+                        <button onclick="removeSignature('${user.id}')" class="app-btn bg-red-400 hover:bg-red-500 p-1 mt-1 text-xs">حذف التوقيع</button>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100">
+                        <p class="text-xs text-gray-500 mb-1">يرجى التوقيع أدناه أو تحميل صورة:</p>
+                        <canvas id="signaturePad" width="150" height="60" class="border border-gray-300 rounded-md bg-white touch-none" style="cursor: crosshair;"></canvas>
+                        <button onclick="saveSignature('${user.id}')" class="app-btn bg-green-500 hover:bg-green-600 p-1 mt-1 text-xs">توقيع واعتماد</button>
+                        <input type="file" id="uploadSignature" accept="image/*" class="hidden" onchange="uploadSignature('${user.id}')">
+                        <button onclick="document.getElementById('uploadSignature').click()" class="app-btn bg-blue-500 hover:bg-blue-600 p-1 mt-1 text-xs">إدراج صورة توقيع</button>
+                    </div>
+                `;
+            }
+        }
+
+        function saveSignature(userId) {
+            const canvas = document.getElementById('signaturePad');
+            if (!canvas) return;
+
+            const context = canvas.getContext('2d');
+            const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+            let isEmpty = true;
+            for (let i = 0; i < data.length; i++) {
+                if (data[i] !== 0) {
+                    isEmpty = false;
+                    break;
+                }
+            }
+
+            if (isEmpty) {
+                showModal('تنبيه', 'الرجاء التوقيع على اللوحة أولاً.', APP_STATE.currentScreen);
+                return;
+            }
+
+            const dataURL = canvas.toDataURL('image/png');
+            updateUserSignature(userId, dataURL);
+        }
+
+        function removeSignature(userId) {
+            updateUserSignature(userId, null);
+        }
+
+        function uploadSignature(userId) {
+            const fileInput = document.getElementById('uploadSignature');
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    updateUserSignature(userId, e.target.result);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function updateUserSignature(userId, signatureDataUrl) {
+            const user = DATA.settings.users.find(u => u.id === userId);
+            if (user) {
+                user.signature = signatureDataUrl;
+                saveData();
+                renderInvoice(document.getElementById('site-select-invoice').value, document.getElementById('month-select-invoice').value);
+                showModal('التوقيع', signatureDataUrl ? 'تم حفظ التوقيع/الاعتماد بنجاح.' : 'تم حذف التوقيع بنجاح.', 'monthlyInvoice');
+            }
+        }
+        
+        // ربط التوقيع بالماوس واللمس
+        function initSignaturePad() {
+            const canvas = document.getElementById('signaturePad');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            let drawing = false;
+
+            // إعدادات القلم
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#000';
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            function startPosition(e) {
+                drawing = true;
+                draw(e);
+            }
+
+            function endPosition() {
+                drawing = false;
+                ctx.beginPath();
+            }
+
+            function draw(e) {
+                if (!drawing) return;
+                
+                // تحديد إحداثيات الماوس أو اللمس بالنسبة للـ canvas
+                const clientRect = canvas.getBoundingClientRect();
+                const x = (e.clientX || e.touches[0].clientX) - clientRect.left;
+                const y = (e.clientY || e.touches[0].clientY) - clientRect.top;
+
+                ctx.lineTo(x, y);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                e.preventDefault();
+            }
+
+            // Mouse events
+            canvas.addEventListener('mousedown', startPosition);
+            canvas.addEventListener('mouseup', endPosition);
+            canvas.addEventListener('mousemove', draw);
+
+            // Touch events
+            canvas.addEventListener('touchstart', startPosition);
+            canvas.addEventListener('touchend', endPosition);
+            canvas.addEventListener('touchmove', draw);
+        }
+
+        // === 10. شاشة الإعدادات (Admin Only) ===
+
+        function showSettings() {
+            if (!APP_STATE.isAdmin) {
+                showModal('خطأ', 'ليس لديك صلاحية الوصول لهذه الشاشة.', 'dashboard');
+                return;
+            }
+            setupHeaderAndNav('الإعدادات');
+
+            mainContent.innerHTML = `
+                <div class="space-y-8">
+                    <h2 class="text-3xl font-extrabold text-amber-900 border-b pb-2">إعدادات النظام (الأدمن)</h2>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        ${createSettingsCard('إدارة المستخدمين والصلاحيات', 'users', 'bg-blue-100', showUserManagement)}
+                        ${createSettingsCard('إدارة المواقع والمشغلين', 'sites', 'bg-green-100', showSiteManagement)}
+                        ${createSettingsCard('تعديل مؤشرات التقييم', 'kpis', 'bg-purple-100', showKpiManagement)}
+                        ${createSettingsCard('إعدادات الفواتير والمخالفات', 'invoicing', 'bg-red-100', showInvoiceManagement)}
+                        ${createSettingsCard('تغيير صورة الترحيب', 'splash', 'bg-yellow-100', showSplashManagement)}
+                    </div>
+
+                    <div id="settings-detail-view" class="mt-8 bg-white p-6 rounded-xl shadow-2xl border border-gray-200">
+                        <p class="text-lg text-gray-500">اختر أحد أقسام الإدارة من الأعلى للبدء.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createSettingsCard(title, id, bgColor, action) {
+            return `
+                <div onclick="${action.name}()" class="p-6 ${bgColor} rounded-xl shadow-lg cursor-pointer hover:shadow-xl transition duration-300">
+                    <h3 class="text-xl font-semibold text-gray-800">${title}</h3>
+                </div>
+            `;
+        }
+        
+        function showUserManagement() {
+             const detailView = document.getElementById('settings-detail-view');
+             const siteOptions = DATA.settings.sites.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+             detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-blue-700 mb-4">إدارة المستخدمين</h3>
+                <div class="bg-blue-50 p-4 rounded-lg mb-6 shadow-md">
+                    <h4 class="font-bold mb-2">إضافة مستخدم جديد</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <input type="text" id="newUserName" placeholder="الاسم" class="p-2 border rounded-lg">
+                        <input type="number" id="newUserCode" placeholder="الرقم الوظيفي" class="p-2 border rounded-lg">
+                        <select id="newUserRole" class="p-2 border rounded-lg">
+                            <option value="user">مستخدم عادي</option>
+                            <option value="admin">مدير (أدمن)</option>
+                            <option value="approver">معتمد تقارير فقط</option>
+                        </select>
+                        <select id="newUserSite" class="p-2 border rounded-lg">
+                            <option value="">اختر الموقع (للمستخدم العادي)</option>
+                            ${siteOptions}
+                        </select>
+                    </div>
+                    <button onclick="addUser()" class="app-btn bg-blue-500 hover:bg-blue-600 text-sm mt-3 w-full">إضافة</button>
+                </div>
+
+                <h4 class="font-bold text-lg mb-2">قائمة المستخدمين الحاليين</h4>
+                <div id="user-list" class="space-y-3">
+                    ${DATA.settings.users.map(u => `
+                        <div class="p-3 border rounded-lg flex justify-between items-center bg-white shadow-sm">
+                            <span class="text-sm">${u.name} (<b class="text-amber-700">${u.id}</b>) - الصلاحية: <b class="text-blue-600">${u.role}</b> - الموقع: ${DATA.settings.sites.find(s => s.id === u.siteId)?.name || 'الكل'}</span>
+                            <button onclick="deleteUser('${u.id}')" class="text-red-500 hover:text-red-700 p-1 text-xs">حذف</button>
+                        </div>
+                    `).join('')}
+                </div>
+             `;
+        }
+
+        function addUser() {
+            const name = document.getElementById('newUserName').value.trim();
+            const id = document.getElementById('newUserCode').value.trim();
+            const role = document.getElementById('newUserRole').value;
+            const siteId = document.getElementById('newUserSite').value;
+
+            if (!name || !id || !role) {
+                showModal('خطأ', 'يرجى ملء جميع الحقول المطلوبة.', 'settings');
+                return;
+            }
+
+            if (DATA.settings.users.find(u => u.id === id)) {
+                showModal('خطأ', 'الرقم الوظيفي موجود مسبقاً.', 'settings');
+                return;
+            }
+
+            DATA.settings.users.push({ id, name, role, siteId: role === 'user' ? siteId : 'All', signature: null });
+            saveData();
+            showModal('نجاح', 'تم إضافة المستخدم بنجاح.', 'settings');
+            showUserManagement();
+        }
+
+        function deleteUser(id) {
+            if (id === '70062') {
+                 showModal('خطأ', 'لا يمكن حذف المستخدم الأدمن الرئيسي.', 'settings');
+                return;
+            }
+            if (confirm('هل أنت متأكد من حذف هذا المستخدم؟')) {
+                DATA.settings.users = DATA.settings.users.filter(u => u.id !== id);
+                saveData();
+                showUserManagement();
+                showModal('نجاح', 'تم حذف المستخدم بنجاح.', 'settings');
+            }
+        }
+
+        function showSiteManagement() {
+            const detailView = document.getElementById('settings-detail-view');
+            detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-green-700 mb-4">إدارة المواقع والمشغلين</h3>
+                
+                <div class="bg-green-50 p-4 rounded-lg mb-6 shadow-md">
+                    <h4 class="font-bold mb-2">إضافة موقع جديد</h4>
+                    <input type="text" id="newSiteName" placeholder="اسم الموقع (مثل مسلخ غياثي)" class="w-full p-2 border rounded-lg mb-2">
+                    <input type="text" id="newOperator" placeholder="اسم المشغل (مثل شركة الجزيرة الخضراء)" class="w-full p-2 border rounded-lg mb-2">
+                    <input type="text" id="newContract" placeholder="رقم العقد (مثل DRM-0024/2)" class="w-full p-2 border rounded-lg mb-2">
+                    <button onclick="addSite()" class="app-btn bg-green-500 hover:bg-green-600 text-sm w-full">إضافة الموقع</button>
+                </div>
+
+                <h4 class="font-bold text-lg mb-2">قائمة المواقع الحالية</h4>
+                <div id="site-list" class="space-y-3">
+                    ${DATA.settings.sites.map(s => `
+                        <div class="p-3 border rounded-lg bg-white shadow-sm flex justify-between items-center">
+                            <div>
+                                <p class="font-bold text-sm">${s.name} (<span class="text-gray-500">${s.id}</span>)</p>
+                                <p class="text-xs">المشغل: ${s.operator} | العقد: ${s.contract}</p>
+                            </div>
+                            <button onclick="deleteSite('${s.id}')" class="text-red-500 hover:text-red-700 p-1 text-xs">حذف</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function addSite() {
+            const name = document.getElementById('newSiteName').value.trim();
+            const operator = document.getElementById('newOperator').value.trim();
+            const contract = document.getElementById('newContract').value.trim();
+            const id = name.replace(/\s/g, '').substring(0, 5) + Math.floor(Math.random() * 100);
+
+            if (!name || !operator || !contract) {
+                showModal('خطأ', 'يرجى ملء جميع حقول الموقع.', 'settings');
+                return;
+            }
+
+            // إنشاء قائمة عمال افتراضية للموقع الجديد
+            const defaultStaff = [
+                { role: 'مشرف', name: 'مشرف جديد', id: 'M_NEW' },
+                { role: 'محاسب', name: 'محاسب جديد', id: 'A_NEW' },
+                { role: 'مراقب', name: 'مراقب جديد', id: 'S_NEW' },
+                { role: 'قصاب', name: 'قصاب جديد 1', id: 'B_NEW1' },
+                { role: 'قصاب', name: 'قصاب جديد 2', id: 'B_NEW2' },
+                { role: 'قصاب', name: 'قصاب جديد 3', id: 'B_NEW3' },
+                { role: 'قصاب', name: 'قصاب جديد 4', id: 'B_NEW4' },
+                { role: 'عامل نظافة', name: 'عامل نظافة جديد 1', id: 'C_NEW1' },
+                { role: 'عامل نظافة', name: 'عامل نظافة جديد 2', id: 'C_NEW2' }
+            ];
+
+            DATA.settings.sites.push({ id, name, operator, contract, staff: defaultStaff });
+            saveData();
+            showModal('نجاح', 'تم إضافة الموقع بنجاح.', 'settings');
+            showSiteManagement();
+        }
+
+        function deleteSite(id) {
+             if (confirm('هل أنت متأكد من حذف هذا الموقع؟ سيؤدي هذا إلى حذف جميع التقارير المرتبطة به.')) {
+                DATA.settings.sites = DATA.settings.sites.filter(s => s.id !== id);
+                DATA.reports = DATA.reports.filter(r => r.siteId !== id);
+                DATA.settings.users.forEach(u => { if(u.siteId === id) u.siteId = DATA.settings.sites[0]?.id || ''; });
+                saveData();
+                showSiteManagement();
+                showModal('نجاح', 'تم حذف الموقع والتقارير المرتبطة به.', 'settings');
+            }
+        }
+
+        function showKpiManagement() {
+            const detailView = document.getElementById('settings-detail-view');
+            const kpiListHTML = DATA.settings.kpis.map((k, index) => {
+                const workers = k.workers.join(', ');
+                return `
+                    <div class="p-3 border rounded-lg bg-white shadow-sm flex flex-col space-y-2">
+                        <div class="flex justify-between items-start">
+                            <input type="text" value="${k.name}" class="p-1 border rounded-md flex-grow" onchange="updateKpiName(${index}, this.value)">
+                            <button onclick="deleteKpi(${index})" class="text-red-500 hover:text-red-700 p-1 text-xs ml-2 flex-shrink-0">حذف</button>
+                        </div>
+                        <div class="flex justify-between text-xs text-gray-600">
+                             <input type="text" value="${k.category}" class="p-1 border rounded-md w-1/3" onchange="updateKpiCategory(${index}, this.value)" title="فئة المؤشر">
+                             <span class="w-2/3 text-right">المعنيون: ${workers}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            const categoryOptions = Object.keys(KPI_CATEGORIES).map(c => `<option value="${c}">${c}</option>`).join('');
+
+            detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-purple-700 mb-4">تعديل مؤشرات التقييم</h3>
+                
+                <div class="bg-purple-50 p-4 rounded-lg mb-6 shadow-md">
+                    <h4 class="font-bold mb-2">إضافة مؤشر جديد</h4>
+                    <input type="text" id="newKpiName" placeholder="اسم مؤشر التقييم" class="w-full p-2 border rounded-lg mb-2">
+                    <select id="newKpiCategory" class="w-full p-2 border rounded-lg mb-2">
+                        ${categoryOptions}
+                        <option value="جديدة">فئة جديدة...</option>
+                    </select>
+                    <div class="space-x-2 space-x-reverse flex flex-wrap mb-2">
+                        ${['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'].map(staff => `
+                            <label class="text-sm">
+                                <input type="checkbox" data-staff="${staff}" class="form-checkbox text-purple-600 rounded"> ${staff}
+                            </label>
+                        `).join('')}
+                    </div>
+                    <button onclick="addKpi()" class="app-btn bg-purple-500 hover:bg-purple-600 text-sm w-full">إضافة المؤشر</button>
+                </div>
+
+                <h4 class="font-bold text-lg mb-2">قائمة مؤشرات التقييم الحالية</h4>
+                <div id="kpi-list" class="space-y-3">
+                    ${kpiListHTML}
+                </div>
+            `;
+        }
+
+        function addKpi() {
+            const name = document.getElementById('newKpiName').value.trim();
+            const category = document.getElementById('newKpiCategory').value;
+            const workers = Array.from(document.querySelectorAll('#settings-detail-view input[type="checkbox"]:checked')).map(cb => cb.dataset.staff);
+
+            if (!name || !category) { showModal('خطأ', 'الرجاء إدخال اسم المؤشر والفئة.', 'settings'); return; }
+
+            const newCategory = category === 'جديدة' ? prompt('أدخل اسم الفئة الجديدة:') : category;
+            if (!newCategory) return;
+            
+            DATA.settings.kpis.push({ name, category: newCategory, workers });
+            if (!KPI_CATEGORIES[newCategory]) KPI_CATEGORIES[newCategory] = [];
+            KPI_CATEGORIES[newCategory].push({ name, category: newCategory, workers });
+            
+            saveData();
+            showModal('نجاح', 'تم إضافة المؤشر بنجاح.', 'settings');
+            showKpiManagement();
+        }
+
+        function updateKpiName(index, newName) {
+            const oldKpi = DATA.settings.kpis[index];
+            if (oldKpi) {
+                oldKpi.name = newName;
+                const categoryArray = KPI_CATEGORIES[oldKpi.category];
+                if (categoryArray) {
+                    const kpiToUpdate = categoryArray.find(k => k === oldKpi);
+                    if (kpiToUpdate) kpiToUpdate.name = newName;
+                }
+                saveData();
+            }
+        }
+        
+        function updateKpiCategory(index, newCategory) {
+            const oldKpi = DATA.settings.kpis[index];
+            if (oldKpi && oldKpi.category !== newCategory) {
+                const oldCategoryArray = KPI_CATEGORIES[oldKpi.category];
+                if (oldCategoryArray) {
+                    KPI_CATEGORIES[oldKpi.category] = oldCategoryArray.filter(k => k !== oldKpi);
+                }
+                
+                if (!KPI_CATEGORIES[newCategory]) KPI_CATEGORIES[newCategory] = [];
+                KPI_CATEGORIES[newCategory].push(oldKpi);
+                
+                oldKpi.category = newCategory;
+                
+                saveData();
+                showKpiManagement();
+            }
+        }
+
+        function deleteKpi(index) {
+            if (confirm('هل أنت متأكد من حذف هذا المؤشر؟')) {
+                const deletedKpi = DATA.settings.kpis.splice(index, 1)[0];
+                
+                const categoryArray = KPI_CATEGORIES[deletedKpi.category];
+                if (categoryArray) {
+                    KPI_CATEGORIES[deletedKpi.category] = categoryArray.filter(k => k !== deletedKpi);
+                }
+                
+                saveData();
+                showKpiManagement();
+            }
+        }
+
+        function showInvoiceManagement() {
+            const detailView = document.getElementById('settings-detail-view');
+            detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-red-700 mb-4">إعدادات الفواتير والمخالفات</h3>
+                
+                <h4 class="text-xl font-semibold mt-4 text-amber-800">1. تكاليف البنود الشهرية</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mt-2 bg-amber-50 p-4 rounded-lg">
+                    ${Object.entries(DATA.settings.invoiceCosts).map(([item, cost]) => `
+                        <div class="p-2 border rounded-lg bg-white shadow-sm">
+                            <label class="block text-sm font-medium">${item}</label>
+                            <input type="number" value="${cost}" class="w-full p-1 border rounded-md text-sm mt-1" onchange="updateInvoiceCost('${item}', this.value)" title="المبلغ الشهري">
+                        </div>
+                    `).join('')}
+                </div>
+
+                <h4 class="text-xl font-semibold mt-6 text-red-800">2. قواعد المخالفات وقيم الخصم</h4>
+                <div class="space-y-3 mt-2 bg-red-50 p-4 rounded-lg">
+                    ${DATA.settings.violations.map(v => `
+                        <div class="p-3 border rounded-lg bg-white shadow-sm flex justify-between items-center">
+                            <input type="text" value="${v.name}" class="p-1 border rounded-md flex-grow" onchange="updateViolationName(${v.id}, this.value)">
+                            <input type="number" value="${v.value}" class="p-1 border rounded-md w-24 text-center ml-2" onchange="updateViolationValue(${v.id}, this.value)">
+                            <button onclick="deleteViolationSettings(${v.id})" class="text-red-500 hover:text-red-700 p-1 text-xs flex-shrink-0">حذف</button>
+                        </div>
+                    `).join('')}
+                    <button onclick="addViolationSettings()" class="app-btn bg-red-500 hover:bg-red-600 p-2 text-sm mt-3 w-full">إضافة مخالفة جديدة</button>
+                </div>
+            `;
+        }
+
+        function updateInvoiceCost(item, cost) {
+            DATA.settings.invoiceCosts[item] = parseInt(cost) || 0;
+            saveData();
+        }
+
+        function updateViolationName(id, name) {
+            const v = DATA.settings.violations.find(x => x.id === id);
+            if (v) v.name = name; saveData();
+        }
+        function updateViolationValue(id, value) {
+            const v = DATA.settings.violations.find(x => x.id === id);
+            if (v) v.value = parseInt(value) || 0; saveData();
+        }
+        function deleteViolationSettings(id) {
+            if (confirm('هل أنت متأكد من حذف هذه المخالفة من الإعدادات؟ لن يتم حذفها من التقارير القديمة.')) {
+                DATA.settings.violations = DATA.settings.violations.filter(v => v.id !== id);
+                saveData();
+                showInvoiceManagement();
+            }
+        }
+        function addViolationSettings() {
+            const newId = (DATA.settings.violations.length > 0 ? Math.max(...DATA.settings.violations.map(v => v.id)) : 0) + 1;
+            DATA.settings.violations.push({ id: newId, name: 'مخالفة جديدة', value: 100 });
+            saveData();
+            showInvoiceManagement();
+        }
+
+        function showSplashManagement() {
+            const detailView = document.getElementById('settings-detail-view');
+            detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-yellow-700 mb-4">تغيير صورة شاشة الترحيب</h3>
+                <img src="${DATA.settings.splashImageUrl}" class="w-32 h-32 rounded-lg shadow-md mb-4" alt="صورة الترحيب الحالية">
+                <input type="file" id="newSplashImage" accept="image/*" class="mb-4 p-2 border rounded-lg">
+                <button onclick="updateSplashImage()" class="app-btn bg-yellow-600 hover:bg-yellow-700">تحديث الصورة</button>
+                <p class="mt-4 text-sm text-gray-500">ملاحظة: حجم الصورة المفضل هو 250x250 بكسل.</p>
+            `;
+        }
+
+        function updateSplashImage() {
+            const fileInput = document.getElementById('newSplashImage');
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    DATA.settings.splashImageUrl = e.target.result;
+                    saveData();
+                    showModal('نجاح', 'تم تحديث صورة الترحيب بنجاح.', 'settings');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                showModal('خطأ', 'الرجاء اختيار صورة أولاً.', 'settings');
+            }
+        }
+
+        // === 11. وظيفة الرسائل المخصصة (بديل لـ alert) ===
+
+        function showModal(title, message, navigateToScreen = 'dashboard', params = {}) {
+            const modalHTML = `
+                <div id="modalOverlay" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+                        <h3 class="text-2xl font-bold mb-4 text-amber-800">${title}</h3>
+                        <p class="text-gray-700 mb-6">${message}</p>
+                        <button onclick="closeModal('${navigateToScreen}', ${JSON.stringify(params)})" class="app-btn">إغلاق</button>
+                    </div>
+                </div>
+            `;
+            appModalContainer.innerHTML = modalHTML;
+            appModalContainer.classList.remove('hidden');
+        }
+
+        function closeModal(navigateToScreen, params) {
+            document.getElementById('modalOverlay')?.remove();
+            appModalContainer.classList.add('hidden');
+            if (APP_STATE.isAuthReady) {
+                navigate(navigateToScreen, params);
+            }
+        }
+
+        // === 12. تشغيل التطبيق ===
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+            if (!loadCurrentState()) {
+                showSplashScreen();
+            }
+        });
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const observer = new MutationObserver((mutationsList, observer) => {
+                for(const mutation of mutationsList) {
+                    if (mutation.type === 'childList' && document.getElementById('signaturePad')) {
+                        initSignaturePad();
+                        observer.disconnect(); 
+                    }
+                }
+            });
+
+            observer.observe(mainContent, { childList: true, subtree: true });
+        });
+    </script>
+</body>
+
+</html>
