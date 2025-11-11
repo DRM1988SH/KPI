@@ -94,6 +94,12 @@
             font-size: 12px;
             font-weight: bold;
         }
+        
+        /* تحسينات للجداول */
+        .staff-table th, .staff-table td {
+            padding: 0.5rem;
+            border: 1px solid #e5e7eb;
+        }
     </style>
 </head>
 
@@ -122,7 +128,7 @@
 
     <script>
         // === 1. تعريف المتغيرات والقيم الأولية ===
-        const LS_KEY = 'abattoir_kpi_data_v3';
+        const LS_KEY = 'abattoir_kpi_data_v4';
         const APP_STATE = {
             currentScreen: 'splash',
             isAuthReady: false,
@@ -139,7 +145,7 @@
                 users: [
                     { id: '70062', name: 'Musab Ali (Admin)', role: 'admin', siteId: 'Ghayathi', signature: null },
                     { id: '70060', name: 'Fadil (User)', role: 'user', siteId: 'Sil', signature: null },
-                    { id: '80000', name: 'Al-Muatamid (Approver)', role: 'approver', siteId: 'All', signature: null }
+                    { id: '00000', name: 'مدير الادارة (Approver)', role: 'approver', siteId: 'All', signature: null }
                 ],
                 sites: [
                     { 
@@ -148,15 +154,16 @@
                         operator: 'شركة الجزيرة الخضراء للاغنام والمواشي', 
                         contract: 'DRM-0024/2', 
                         staff: [
-                            { role: 'مشرف', name: 'أحمد محمد', id: 'M001' },
-                            { role: 'محاسب', name: 'سالم علي', id: 'A001' },
-                            { role: 'مراقب', name: 'خالد إبراهيم', id: 'S001' },
-                            { role: 'قصاب', name: 'محمد حسن', id: 'B001' },
-                            { role: 'قصاب', name: 'علي محمود', id: 'B002' },
-                            { role: 'قصاب', name: 'يوسف أحمد', id: 'B003' },
-                            { role: 'قصاب', name: 'حمزة كمال', id: 'B004' },
-                            { role: 'عامل نظافة', name: 'فارس جمال', id: 'C001' },
-                            { role: 'عامل نظافة', name: 'ناصر راشد', id: 'C002' }
+                            { role: 'مشرف', name: 'عبد العزيز وفيق ', id: 'M001' },
+                            { role: 'محاسب', name: 'صافي الدين الضو', id: 'A001' },
+                            { role: 'مراقب', name: 'محمد شهباز', id: 'S001' },
+                            { role: 'قصاب', name: 'محمد وفيق', id: 'B001' },
+                            { role: 'قصاب', name: 'احمد محمود', id: 'B002' },
+                            { role: 'قصاب', name: 'عمر عبدالسلام', id: 'B003' },
+                            { role: 'قصاب', name: 'صبري برعي', id: 'B004' },
+                            { role: 'عامل نظافة', name: 'سفير احمد', id: 'C001' },
+                            { role: 'عامل نظافة', name: 'اياز خان', id: 'C002' },
+                            { role: 'حمال', name: 'ايمن الفخراني', id: 'L001' }
                         ] 
                     },
                     { 
@@ -173,25 +180,26 @@
                             { role: 'قصاب', name: 'سالم أحمد', id: 'B007' },
                             { role: 'قصاب', name: 'محمد خالد', id: 'B008' },
                             { role: 'عامل نظافة', name: 'خليفة محمد', id: 'C003' },
-                            { role: 'عامل نظافة', name: 'ناصر عبدالله', id: 'C004' }
+                            { role: 'عامل نظافة', name: 'ناصر عبدالله', id: 'C004' },
+                            { role: 'حمال', name: 'أحمد محمود', id: 'L002' }
                         ] 
                     }
                 ],
                 // تحديث قائمة KPI لربطها بالهيكلة الجديدة للتقرير الشهري
                 kpis: [
                     // A. خدمات الإدارة
-                    { name: 'الحضور والانصراف', category: 'الإدارة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'] },
+                    { name: 'الحضور والانصراف', category: 'الإدارة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'حمال'] },
                     { name: 'توفير تقارير إدارية من المشرف', category: 'الإدارة', workers: ['مشرف'] },
                     
                     // B. خدمات الذبح
-                    { name: 'النظافة الشخصية', category: 'الذبح', workers: ['قصاب', 'عامل نظافة'] },
-                    { name: 'نظافة المعدات', category: 'الذبح', workers: ['قصاب', 'عامل نظافة'] },
-                    { name: 'نظافة مكان العمل', category: 'الذبح', workers: ['قصاب', 'عامل نظافة'] },
+                    { name: 'النظافة الشخصية', category: 'الذبح', workers: ['قصاب', 'عامل نظافة', 'حمال'] },
+                    { name: 'نظافة المعدات', category: 'الذبح', workers: ['قصاب', 'عامل نظافة', 'حمال'] },
+                    { name: 'نظافة مكان العمل', category: 'الذبح', workers: ['قصاب', 'عامل نظافة', 'حمال'] },
                     { name: 'توفير المعدات والأدوات للعمل', category: 'الذبح', workers: ['مشرف'] },
                     
                     // C. خدمات النظافة والصحة
-                    { name: 'شهادات تدريب السلامة الغذائية EFST', category: 'النظافة والصحة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'] },
-                    { name: 'شهادة تدريب السلامة المهنية', category: 'النظافة والصحة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'] },
+                    { name: 'شهادات تدريب السلامة الغذائية EFST', category: 'النظافة والصحة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'حمال'] },
+                    { name: 'شهادة تدريب السلامة المهنية', category: 'النظافة والصحة', workers: ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'حمال'] },
                     { name: 'توفير مستلزمات النظافة والمنظفات', category: 'النظافة والصحة', workers: ['مشرف'] },
                     
                     // D. خدمات الصيانة
@@ -199,11 +207,14 @@
                 ],
                 // تكاليف وأعداد افتراضية
                 invoiceCosts: {
-                    'مشرف': 4500, 'محاسب': 3500, 'مراقب': 2250, 'قصاب': 11500, 'عامل نظافة': 2300, 'مواد التنظيف': 1000
+                    'مشرف': 4500, 'محاسب': 3500, 'مراقب': 2250, 'قصاب': 11500, 'عامل نظافة': 2300, 'حمال': 2000, 'مواد التنظيف': 1000
                 },
                 violations: [
-                    { id: 1, name: 'عدم توفير شهادات سلامة', value: 1000, description: 'خصم لعدم التزام العاملين بشهادات السلامة.' },
-                    { id: 2, name: 'تأخير في الصيانة', value: 500, description: 'خصم بسبب تأخر المقاول في إجراء الصيانة المطلوبة.' }
+                    { id: 1, name: 'عدم توفير شهادات سلامة', value: 1000, description: 'خصم لعدم التزام العاملين بشهادات السلامة.', category: 'النظافة والصحة' },
+                    { id: 2, name: 'تأخير في الصيانة', value: 500, description: 'خصم بسبب تأخر المقاول في إجراء الصيانة المطلوبة.', category: 'الصيانة' },
+                    { id: 3, name: 'مخالفات النظافة', value: 300, description: 'خصم بسبب عدم الالتزام بمعايير النظافة.', category: 'النظافة والصحة' },
+                    { id: 4, name: 'مخالفات الإدارة', value: 400, description: 'خصم بسبب تقصير في الأعمال الإدارية.', category: 'الإدارة' },
+                    { id: 5, name: 'مخالفات الذبح', value: 600, description: 'خصم بسبب عدم الالتزام بمعايير الذبح.', category: 'الذبح' }
                 ],
                 splashImageUrl: 'https://placehold.co/250x250/EAC696/ffffff?text=ABATTOIR+KPI',
             },
@@ -417,7 +428,7 @@
                         </div>
                         <button id="loginBtn" class="app-btn w-full mt-4 text-lg">دخول</button>
                         <p id="loginMessage" class="mt-4 text-center text-red-600 hidden">الرقم الوظيفي غير صحيح أو غير موجود.</p>
-                        <p class="mt-6 text-center text-sm text-gray-500">أرقام تجريبية: 70062 (أدمن), 70060 (مستخدم), 80000 (معتمد)</p>
+                       
                     </div>
                 </div>
             `;
@@ -574,8 +585,10 @@
             siteStaff.forEach(staff => {
                 const bgColorClass = staff.role === 'مشرف' ? 'bg-supervisor' :
                                      staff.role === 'محاسب' ? 'bg-accountant' :
+                                     staff.role === 'مراقب' ? 'bg-supervisor' :
                                      staff.role === 'قصاب' ? 'bg-butcher' :
-                                     staff.role === 'عامل نظافة' ? 'bg-cleaner' : 'bg-gray-200';
+                                     staff.role === 'عامل نظافة' ? 'bg-cleaner' :
+                                     staff.role === 'حمال' ? 'bg-cleaner' : 'bg-gray-200';
                 tableHTML += `<th class="py-3 px-4 border-b text-center text-sm font-semibold text-gray-700 ${bgColorClass}" style="min-width: 120px;">${staff.name}<br>(${staff.role})</th>`;
             });
 
@@ -608,7 +621,7 @@
                         tableHTML += `
                             <td class="py-3 px-4 border-b text-center">
                                 <div class="flex items-center justify-center p-1">
-                                    <input type="checkbox" data-kpi-index="${oldKpiIndex}" data-worker-key="${workerKey}"
+                                    <input type="checkbox" data-kpi-index="${oldKpiIndex}" data-worker-key="${workerKey}" data-kpi-category="${kpi.category}"
                                         class="form-checkbox h-5 w-5 text-amber-600 rounded" ${isChecked ? 'checked' : ''}>
                                 </div>
                             </td>
@@ -743,6 +756,49 @@
             return { percentage, scores, totalPossibleScore, actualScore };
         }
 
+        // وظيفة جديدة لاكتشاف أسباب انخفاض الأداء
+        function detectPerformanceIssues(scores, siteStaff) {
+            const issues = [];
+            
+            DATA.settings.kpis.forEach((kpi, kpiIndex) => {
+                const kpiWorkers = kpi.workers.filter(w => siteStaff.some(s => s.role === w));
+                let kpiScore = 0;
+                let kpiPossible = 0;
+                
+                kpiWorkers.forEach(requiredRole => {
+                    siteStaff.forEach(staff => {
+                        if (staff.role === requiredRole) {
+                            kpiPossible++;
+                            const workerKey = staff.id;
+                            if (scores[kpiIndex] && scores[kpiIndex][workerKey]) {
+                                kpiScore++;
+                            }
+                        }
+                    });
+                });
+                
+                const kpiPercentage = kpiPossible > 0 ? (kpiScore / kpiPossible) * 100 : 100;
+                
+                // إذا كان أداء المؤشر أقل من 100%
+                if (kpiPercentage < 100) {
+                    // العثور على المخالفة المناسبة لهذا النوع من المؤشرات
+                    const relatedViolation = DATA.settings.violations.find(v => v.category === kpi.category);
+                    if (relatedViolation && !issues.some(issue => issue.violationId === relatedViolation.id)) {
+                        issues.push({
+                            violationId: relatedViolation.id,
+                            name: relatedViolation.name,
+                            value: relatedViolation.value,
+                            category: kpi.category,
+                            kpiName: kpi.name,
+                            percentage: kpiPercentage
+                        });
+                    }
+                }
+            });
+            
+            return issues;
+        }
+
         function handleSubmitReport() {
             const { percentage, scores } = calculateDailyKPI();
             const dailyNotes = document.getElementById('dailyNotes').value.trim();
@@ -766,6 +822,27 @@
                     siteId: currentSiteId,
                 };
             });
+
+            // إذا كان الأداء أقل من 100%، نكتشف المخالفات تلقائياً
+            if (percentage < 100) {
+                const detectedIssues = detectPerformanceIssues(scores, APP_STATE.currentSite.staff);
+                
+                detectedIssues.forEach(issue => {
+                    // التأكد من عدم وجود المخالفة مسبقاً
+                    if (!newViolations.some(v => v.violationId === issue.violationId)) {
+                        newViolations.push({
+                            id: crypto.randomUUID(),
+                            violationId: issue.violationId,
+                            name: issue.name,
+                            value: issue.value,
+                            notes: `مخالفة تلقائية بسبب انخفاض أداء ${issue.kpiName} (${issue.percentage.toFixed(1)}%)`,
+                            isClosed: false,
+                            reportDate: reportDate,
+                            siteId: currentSiteId,
+                        });
+                    }
+                });
+            }
 
             // شرط التقديم الإجباري
             const warningEl = document.getElementById('violation-warning');
@@ -1196,6 +1273,10 @@
                 .pop();
             const dataEntryUser = lastDayReport ? lastDayReport.userName : 'غير معروف';
             
+            // الحصول على توقيع المدخل
+            const dataEntryUserObj = DATA.settings.users.find(u => u.name === dataEntryUser);
+            const dataEntryUserSignature = dataEntryUserObj ? dataEntryUserObj.signature : null;
+            
             // التحقق مما إذا كان التقرير معتمداً
             const isApproved = DATA.approvedReports.some(ar => 
                 ar.siteId === siteId && 
@@ -1205,7 +1286,7 @@
             
             // 1. حساب الإجماليات
             let itemsTotal = 0;
-            const invoiceItems = ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'مواد التنظيف'];
+            const invoiceItems = ['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'حمال', 'مواد التنظيف'];
             const itemDetails = invoiceItems.map((item, index) => {
                 const count = item === 'مواد التنظيف' ? 1 : site.staff.filter(s => s.role === item).length;
                 const cost = invoiceCosts[item] || 0;
@@ -1264,6 +1345,10 @@
             const approverSignatureHtml = approverUser.signature ? 
                 `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${approverUser.signature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع"></div>` : 
                 `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">غير معتمد بعد</div>`;
+
+            const dataEntrySignatureHtml = dataEntryUserSignature ? 
+                `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${dataEntryUserSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="توقيع المدخل"></div>` : 
+                `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">لا يوجد توقيع</div>`;
 
             // تصميم الفاتورة بنسق Landscape
             const invoiceHTML = `
@@ -1328,9 +1413,9 @@
                     </div>
 
                     <div class="flex justify-between mt-8 text-center text-base">
-                        <div>
-                            <p class="font-semibold border-b border-gray-400 mb-2">اسم المدخل (المشغل)</p>
-                            <p>${dataEntryUser}</p>
+                        <div class="flex flex-col">
+                            <p class="font-semibold border-b border-gray-400 mb-2">المدخل (${dataEntryUser})</p>
+                            ${dataEntrySignatureHtml}
                         </div>
                         <div class="flex flex-col">
                             <p class="font-semibold border-b border-gray-400 mb-2">اعتماد المسؤول (${approverUser.name})</p>
@@ -1533,6 +1618,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         ${createSettingsCard('إدارة المستخدمين والصلاحيات', 'users', 'bg-blue-100', showUserManagement)}
                         ${createSettingsCard('إدارة المواقع والمشغلين', 'sites', 'bg-green-100', showSiteManagement)}
+                        ${createSettingsCard('إدارة العاملين', 'staff', 'bg-purple-100', showStaffManagement)}
                         ${createSettingsCard('تعديل مؤشرات التقييم', 'kpis', 'bg-purple-100', showKpiManagement)}
                         ${createSettingsCard('إعدادات الفواتير والمخالفات', 'invoicing', 'bg-red-100', showInvoiceManagement)}
                         ${createSettingsCard('تغيير صورة الترحيب', 'splash', 'bg-yellow-100', showSplashManagement)}
@@ -1551,6 +1637,137 @@
                     <h3 class="text-xl font-semibold text-gray-800">${title}</h3>
                 </div>
             `;
+        }
+        
+        // إدارة العاملين الجديدة
+        function showStaffManagement() {
+            const detailView = document.getElementById('settings-detail-view');
+            
+            const staffTables = DATA.settings.sites.map(site => `
+                <div class="mb-8">
+                    <h4 class="text-xl font-semibold text-purple-700 mb-4">${site.name}</h4>
+                    <div class="overflow-x-auto">
+                        <table class="staff-table min-w-full bg-white border border-gray-300 rounded-lg overflow-hidden shadow-md">
+                            <thead class="bg-purple-100">
+                                <tr>
+                                    <th class="py-2 px-3 border text-right">الاسم</th>
+                                    <th class="py-2 px-3 border text-right">الوظيفة</th>
+                                    <th class="py-2 px-3 border text-center">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staff-list-${site.id}">
+                                ${site.staff.map(staff => `
+                                    <tr>
+                                        <td class="border py-2 px-3">
+                                            <input type="text" value="${staff.name}" class="w-full p-1 border rounded staff-name" data-site="${site.id}" data-id="${staff.id}">
+                                        </td>
+                                        <td class="border py-2 px-3">
+                                            <select class="w-full p-1 border rounded staff-role" data-site="${site.id}" data-id="${staff.id}">
+                                                <option value="مشرف" ${staff.role === 'مشرف' ? 'selected' : ''}>مشرف</option>
+                                                <option value="محاسب" ${staff.role === 'محاسب' ? 'selected' : ''}>محاسب</option>
+                                                <option value="مراقب" ${staff.role === 'مراقب' ? 'selected' : ''}>مراقب</option>
+                                                <option value="قصاب" ${staff.role === 'قصاب' ? 'selected' : ''}>قصاب</option>
+                                                <option value="عامل نظافة" ${staff.role === 'عامل نظافة' ? 'selected' : ''}>عامل نظافة</option>
+                                                <option value="حمال" ${staff.role === 'حمال' ? 'selected' : ''}>حمال</option>
+                                            </select>
+                                        </td>
+                                        <td class="border py-2 px-3 text-center">
+                                            <button onclick="updateStaff('${site.id}', '${staff.id}')" class="app-btn bg-green-500 hover:bg-green-600 p-1 text-xs">تحديث</button>
+                                            <button onclick="deleteStaff('${site.id}', '${staff.id}')" class="app-btn bg-red-500 hover:bg-red-600 p-1 text-xs mr-2">حذف</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-4 bg-purple-50 p-4 rounded-lg">
+                        <h5 class="font-semibold mb-2">إضافة عامل جديد لـ ${site.name}</h5>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <input type="text" id="new-staff-name-${site.id}" placeholder="اسم العامل" class="p-2 border rounded-lg">
+                            <select id="new-staff-role-${site.id}" class="p-2 border rounded-lg">
+                                <option value="مشرف">مشرف</option>
+                                <option value="محاسب">محاسب</option>
+                                <option value="مراقب">مراقب</option>
+                                <option value="قصاب">قصاب</option>
+                                <option value="عامل نظافة">عامل نظافة</option>
+                                <option value="حمال">حمال</option>
+                            </select>
+                            <button onclick="addStaff('${site.id}')" class="app-btn bg-purple-500 hover:bg-purple-600 text-sm">إضافة العامل</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-purple-700 mb-4">إدارة العاملين</h3>
+                <div class="bg-purple-50 p-4 rounded-lg mb-6 shadow-md">
+                    <p class="text-purple-700">هنا يمكنك إدارة العاملين في كل موقع. سيتم تحديث التغييرات مباشرة في التقييم اليومي.</p>
+                </div>
+                ${staffTables}
+            `;
+        }
+
+        function addStaff(siteId) {
+            const nameInput = document.getElementById(`new-staff-name-${siteId}`);
+            const roleSelect = document.getElementById(`new-staff-role-${siteId}`);
+            
+            const name = nameInput.value.trim();
+            const role = roleSelect.value;
+            
+            if (!name) {
+                showModal('خطأ', 'يرجى إدخال اسم العامل.', 'settings');
+                return;
+            }
+            
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            if (site) {
+                const newStaff = {
+                    id: `STAFF_${Date.now()}`,
+                    name: name,
+                    role: role
+                };
+                
+                site.staff.push(newStaff);
+                saveData();
+                
+                showStaffManagement();
+            }
+        }
+
+        function updateStaff(siteId, staffId) {
+            const nameInput = document.querySelector(`.staff-name[data-site="${siteId}"][data-id="${staffId}"]`);
+            const roleSelect = document.querySelector(`.staff-role[data-site="${siteId}"][data-id="${staffId}"]`);
+            
+            const name = nameInput.value.trim();
+            const role = roleSelect.value;
+            
+            if (!name) {
+                showModal('خطأ', 'يرجى إدخال اسم العامل.', 'settings');
+                return;
+            }
+            
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            if (site) {
+                const staff = site.staff.find(s => s.id === staffId);
+                if (staff) {
+                    staff.name = name;
+                    staff.role = role;
+                    saveData();
+                   
+                }
+            }
+        }
+
+        function deleteStaff(siteId, staffId) {
+            if (confirm('هل أنت متأكد من حذف هذا العامل؟')) {
+                const site = DATA.settings.sites.find(s => s.id === siteId);
+                if (site) {
+                    site.staff = site.staff.filter(s => s.id !== staffId);
+                    saveData();
+                    showModal('نجاح', 'تم حذف العامل بنجاح.', 'settings');
+                    showStaffManagement();
+                }
+            }
         }
         
         function showUserManagement() {
@@ -1607,7 +1824,7 @@
 
             DATA.settings.users.push({ id, name, role, siteId: role === 'user' ? siteId : 'All', signature: null });
             saveData();
-            showModal('نجاح', 'تم إضافة المستخدم بنجاح.', 'settings');
+            
             showUserManagement();
         }
 
@@ -1620,7 +1837,7 @@
                 DATA.settings.users = DATA.settings.users.filter(u => u.id !== id);
                 saveData();
                 showUserManagement();
-                showModal('نجاح', 'تم حذف المستخدم بنجاح.', 'settings');
+               
             }
         }
 
@@ -1673,12 +1890,13 @@
                 { role: 'قصاب', name: 'قصاب جديد 3', id: 'B_NEW3' },
                 { role: 'قصاب', name: 'قصاب جديد 4', id: 'B_NEW4' },
                 { role: 'عامل نظافة', name: 'عامل نظافة جديد 1', id: 'C_NEW1' },
-                { role: 'عامل نظافة', name: 'عامل نظافة جديد 2', id: 'C_NEW2' }
+                { role: 'عامل نظافة', name: 'عامل نظافة جديد 2', id: 'C_NEW2' },
+                { role: 'حمال', name: 'حمال جديد', id: 'L_NEW' }
             ];
 
             DATA.settings.sites.push({ id, name, operator, contract, staff: defaultStaff });
             saveData();
-            showModal('نجاح', 'تم إضافة الموقع بنجاح.', 'settings');
+           
             showSiteManagement();
         }
 
@@ -1689,7 +1907,7 @@
                 DATA.settings.users.forEach(u => { if(u.siteId === id) u.siteId = DATA.settings.sites[0]?.id || ''; });
                 saveData();
                 showSiteManagement();
-                showModal('نجاح', 'تم حذف الموقع والتقارير المرتبطة به.', 'settings');
+                
             }
         }
 
@@ -1724,7 +1942,7 @@
                         <option value="جديدة">فئة جديدة...</option>
                     </select>
                     <div class="space-x-2 space-x-reverse flex flex-wrap mb-2">
-                        ${['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة'].map(staff => `
+                        ${['مشرف', 'محاسب', 'مراقب', 'قصاب', 'عامل نظافة', 'حمال'].map(staff => `
                             <label class="text-sm">
                                 <input type="checkbox" data-staff="${staff}" class="form-checkbox text-purple-600 rounded"> ${staff}
                             </label>
@@ -1755,7 +1973,7 @@
             KPI_CATEGORIES[newCategory].push({ name, category: newCategory, workers });
             
             saveData();
-            showModal('نجاح', 'تم إضافة المؤشر بنجاح.', 'settings');
+            
             showKpiManagement();
         }
 
@@ -1855,7 +2073,13 @@
         }
         function addViolationSettings() {
             const newId = (DATA.settings.violations.length > 0 ? Math.max(...DATA.settings.violations.map(v => v.id)) : 0) + 1;
-            DATA.settings.violations.push({ id: newId, name: 'مخالفة جديدة', value: 100 });
+            DATA.settings.violations.push({ 
+                id: newId, 
+                name: 'مخالفة جديدة', 
+                value: 100,
+                category: 'الإدارة',
+                description: 'مخالفة جديدة'
+            });
             saveData();
             showInvoiceManagement();
         }
@@ -1879,7 +2103,7 @@
                 reader.onload = function(e) {
                     DATA.settings.splashImageUrl = e.target.result;
                     saveData();
-                    showModal('نجاح', 'تم تحديث صورة الترحيب بنجاح.', 'settings');
+                    
                 };
                 reader.readAsDataURL(file);
             } else {
