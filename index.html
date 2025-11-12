@@ -236,7 +236,7 @@
 
     <script>
         // === 1. تعريف المتغيرات والقيم الأولية ===
-        const LS_KEY = 'abattoir_kpi_data_v12'; // زيادة رقم الإصدار
+        const LS_KEY = 'abattoir_kpi_data_v13'; // زيادة رقم الإصدار
         const APP_STATE = {
             currentScreen: 'splash',
             isAuthReady: false,
@@ -2041,7 +2041,7 @@
             const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
             const hundreds = ['', 'مائة', 'مئتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
             
-            if (integerPart === 0 && decimalPart === 0) return 'صفر درهم';
+            if (integerPart === 0 && decimalPart === 0) return '';
             
             let result = '';
             
@@ -2175,10 +2175,10 @@
             });
             const averageKPI = totalCategories > 0 ? (totalOverallPercentage / totalCategories).toFixed(2) : '0.00';
             
-            // خصم مؤشر الأداء: إذا كان الأداء أقل من 95%، يتم خصم 1% من الإجمالي قبل الضريبة لكل نقطة تحت الـ 95
+            // خصم مؤشر الأداء: إذا كان الأداء أقل من 95%، يتم خصم 1% من الإجمالي قبل الضريبة لكل نقطة تحت الـ 90
             let kpiAdjustment = 0;
-            if (parseFloat(averageKPI) < 95 && filteredReports.length > 0) {
-                const deductionRate = (95 - parseFloat(averageKPI)) / 100;
+            if (parseFloat(averageKPI) < 90 && filteredReports.length > 0) {
+                const deductionRate = (90 - parseFloat(averageKPI)) / 100;
                 kpiAdjustment = -(itemsTotal * deductionRate);
             }
             // تقريب التعديل لأقرب عدد صحيح
