@@ -22,6 +22,7 @@
         body {
             font-family: 'Noto Sans Arabic', sans-serif;
             background-color: #f8f8f8;
+            padding-bottom: 60px; /* مساحة للفوتر */
         }
 
         /* تنسيق الأزرار المشترك */
@@ -45,6 +46,22 @@
             height: 120px;
             background-color: var(--header-bg);
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        /* تنسيق الفوتر - ارتفاع 60px */
+        .app-footer {
+            height: 60px;
+            background-color: var(--header-bg);
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 -4px 6px -1px rgba(0, 0, 0, 0.1);
         }
 
         /* تحديد الألوان الخاصة بأعمدة التقييم */
@@ -100,6 +117,93 @@
             padding: 0.5rem;
             border: 1px solid #e5e7eb;
         }
+        
+        /* تنسيق خاص للتقارير الشهرية */
+        .monthly-report-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .monthly-report-table th, 
+        .monthly-report-table td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: center;
+        }
+        
+        .monthly-report-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        
+        /* تنسيق التوقيعات */
+        .signature-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            margin-top: 10px;
+        }
+        
+        .signature-preview {
+            max-width: 200px;
+            max-height: 80px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        /* تنسيق جداول التقييم الشهري */
+        .monthly-evaluation-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        
+        .monthly-evaluation-table th, 
+        .monthly-evaluation-table td {
+            border: 1px solid #ccc;
+            padding: 4px;
+            text-align: center;
+        }
+        
+        .monthly-evaluation-table th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+        
+        .monthly-evaluation-table .kpi-name {
+            text-align: right;
+            font-weight: bold;
+            background-color: #f9f9f9;
+        }
+        
+        .monthly-evaluation-table .staff-name {
+            white-space: nowrap;
+            background-color: #f0f0f0;
+        }
+
+        /* رسائل النجاح العابرة (Toast) */
+        .success-toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 1000;
+            animation: fadeInOut 3s ease-in-out;
+            font-weight: bold;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; top: 0; }
+            10% { opacity: 1; top: 20px; }
+            90% { opacity: 1; top: 20px; }
+            100% { opacity: 0; top: 0; }
+        }
     </style>
 </head>
 
@@ -109,7 +213,7 @@
     <div id="app-container" class="min-h-screen flex flex-col items-center">
 
         <!-- رأس البرنامج المشترك -->
-        <header id="app-header" class="app-header w-full flex flex-col md:flex-row items-center justify-between p-4 shadow-lg sticky top-0 z-10 hidden">
+        <header id="app-header" class="app-header w-full flex flex-col md:flex-row items-center justify-between p-4 shadow-lg hidden">
             <h1 id="header-title" class="text-3xl font-bold text-amber-900 mb-2 md:mb-0"></h1>
             <!-- تم إضافة flex-wrap و gap-2 لضمان عدم تداخل الأزرار على الشاشات الصغيرة -->
             <nav id="navbar" class="flex flex-wrap justify-center md:justify-end gap-2"></nav>
@@ -119,22 +223,27 @@
         <main id="main-content" class="w-full max-w-7xl flex-grow p-4 md:p-8"></main>
     </div>
 
+    <!-- الفوتر -->
+    <footer class="app-footer">
+        <p class="text-amber-900 font-medium">جميع الحقوق محفوظة - النظام تجريبي وليس رسمي</p>
+    </footer>
+
     <!-- حاوية عرض الطباعة (مخفية حتى يتم الضغط على زر الطباعة) -->
     <div id="invoice-print-view" class="hidden"></div>
     
     <!-- Modal Container -->
     <div id="appModal" class="hidden"></div>
 
-
     <script>
         // === 1. تعريف المتغيرات والقيم الأولية ===
-        const LS_KEY = 'abattoir_kpi_data_v4';
+        const LS_KEY = 'abattoir_kpi_data_v12'; // زيادة رقم الإصدار
         const APP_STATE = {
             currentScreen: 'splash',
             isAuthReady: false,
             loggedInUser: null,
             isAdmin: false,
             isApprover: false,
+            isCoordinator: false,
             currentSite: null,
             currentReportDate: new Date().toISOString().split('T')[0],
         };
@@ -145,7 +254,8 @@
                 users: [
                     { id: '70062', name: 'Musab Ali (Admin)', role: 'admin', siteId: 'Ghayathi', signature: null },
                     { id: '70060', name: 'Fadil (User)', role: 'user', siteId: 'Sil', signature: null },
-                    { id: '00000', name: 'مدير الادارة (Approver)', role: 'approver', siteId: 'All', signature: null }
+                    { id: '00000', name: 'مدير الادارة (Approver)', role: 'approver', siteId: 'All', signature: null },
+                    { id: '00001', name: 'رئيس الشعبة (Coordinator)', role: 'coordinator', siteId: 'All', signature: null }
                 ],
                 sites: [
                     { 
@@ -210,16 +320,19 @@
                     'مشرف': 4500, 'محاسب': 3500, 'مراقب': 2250, 'قصاب': 11500, 'عامل نظافة': 2300, 'حمال': 2000, 'مواد التنظيف': 1000
                 },
                 violations: [
-                    { id: 1, name: 'عدم توفير شهادات سلامة', value: 1000, description: 'خصم لعدم التزام العاملين بشهادات السلامة.', category: 'النظافة والصحة' },
-                    { id: 2, name: 'تأخير في الصيانة', value: 500, description: 'خصم بسبب تأخر المقاول في إجراء الصيانة المطلوبة.', category: 'الصيانة' },
-                    { id: 3, name: 'مخالفات النظافة', value: 300, description: 'خصم بسبب عدم الالتزام بمعايير النظافة.', category: 'النظافة والصحة' },
-                    { id: 4, name: 'مخالفات الإدارة', value: 400, description: 'خصم بسبب تقصير في الأعمال الإدارية.', category: 'الإدارة' },
-                    { id: 5, name: 'مخالفات الذبح', value: 600, description: 'خصم بسبب عدم الالتزام بمعايير الذبح.', category: 'الذبح' }
+                    { id: 1, name: 'غياب مشرف العمال', value: 500, description: 'خصم لغياب مشرف العمال.', category: 'الإدارة', unit: 'يوم' },
+                    { id: 2, name: 'غياب (محاسب - قصاب - عامل نظافة - عامل جلود - حمال)', value: 300, description: 'خصم لغياب العمال.', category: 'الإدارة', unit: 'عامل يوم' },
+                    { id: 3, name: 'مخالفة شروط الصحة والسلامة المهنية', value: 400, description: 'خصم لمخالفة شروط الصحة والسلامة المهنية.', category: 'النظافة والصحة', unit: 'يوم' },
+                    { id: 4, name: 'مخالفة النظافة والتطهير', value: 350, description: 'خصم لمخالفة النظافة والتطهير.', category: 'النظافة والصحة', unit: 'يوم' },
+                    { id: 5, name: 'تقرير الفحص المخبري سلبي', value: 600, description: 'خصم لتقرير الفحص المخبري السلبي.', category: 'النظافة والصحة', unit: 'سلبي' }
                 ],
                 splashImageUrl: 'https://placehold.co/250x250/EAC696/ffffff?text=ABATTOIR+KPI',
+                kpiImageUrl: 'https://placehold.co/250x250/EAC696/ffffff?text=KPI+IMAGE'
             },
             reports: [], // بيانات التقارير اليومية
-            approvedReports: [] // التقارير المعتمدة
+            approvedReports: [], // التقارير المعتمدة
+            monthlyReports: [], // التقارير الشهرية الجديدة
+            notifications: [] // الإشعارات الجديدة
         };
 
         // تجميع المؤشرات حسب الفئة لسهولة بناء الجدول
@@ -241,7 +354,6 @@
         const appHeader = document.getElementById('app-header');
         const appModalContainer = document.getElementById('appModal');
 
-
         // === 2. وظائف إدارة البيانات (Local Storage) ===
 
         function loadData() {
@@ -253,6 +365,8 @@
                     DATA.settings = { ...DATA.settings, ...loadedData.settings };
                     DATA.reports = loadedData.reports || [];
                     DATA.approvedReports = loadedData.approvedReports || [];
+                    DATA.monthlyReports = loadedData.monthlyReports || [];
+                    DATA.notifications = loadedData.notifications || [];
                 }
             } catch (error) {
                 console.error('Error loading data from Local Storage:', error);
@@ -285,8 +399,14 @@
                 case 'dailyEvaluation':
                     showDailyEvaluation(params.date);
                     break;
+                case 'monthlyEvaluation': // شاشة جديدة للتقييم الشهري
+                    showMonthlyEvaluation(params.monthYear, params.siteId);
+                    break;
                 case 'monthlyKPI':
                     showMonthlyKPI();
+                    break;
+                case 'monthlyReport':
+                    showMonthlyReport();
                     break;
                 case 'violations':
                     showViolations();
@@ -296,6 +416,9 @@
                     break;
                 case 'settings':
                     showSettings();
+                    break;
+                case 'userSignature':
+                    showUserSignature();
                     break;
                 default:
                     showDashboard();
@@ -309,25 +432,39 @@
 
             // حساب عدد التقارير غير المعتمدة للإشعارات
             const pendingApprovalCount = getPendingApprovalCount();
+            const notificationCount = getUnreadNotificationCount();
 
             const links = [
-                { name: 'الرئيسية', screen: 'dashboard', roles: ['admin', 'user', 'approver'] },
+                { name: 'الرئيسية', screen: 'dashboard', roles: ['admin', 'user', 'approver', 'coordinator'] },
                 { name: 'تقييم يومي', screen: 'dailyEvaluation', roles: ['admin', 'user'] },
+                { name: 'تقييم شهري', screen: 'monthlyEvaluation', roles: ['admin', 'user'] }, // تم التعديل: لا تظهر للمعتمد والمنسق
                 { 
                     name: 'مؤشر شهري', 
                     screen: 'monthlyKPI', 
-                    roles: ['admin', 'user', 'approver'],
-                    notification: APP_STATE.isApprover ? pendingApprovalCount.kpi : 0
+                    roles: ['admin', 'user', 'approver', 'coordinator'],
+                    notification: (APP_STATE.isApprover || APP_STATE.isCoordinator) ? pendingApprovalCount.kpi : 0
                 },
-                { name: 'المخالفات', screen: 'violations', roles: ['admin', 'user'] },
+                { 
+                    name: 'التقرير الشهري', 
+                    screen: 'monthlyReport', 
+                    roles: ['admin', 'user', 'coordinator'],
+                    notification: APP_STATE.isCoordinator ? pendingApprovalCount.monthly : 0
+                },
+                { 
+                    name: 'المخالفات', 
+                    screen: 'violations', 
+                    roles: ['admin', 'user'],
+                    notification: notificationCount.violations
+                },
                 { 
                     name: 'الفاتورة', 
                     screen: 'monthlyInvoice', 
-                    roles: ['admin', 'user', 'approver'],
+                    roles: ['admin', 'user', 'approver', 'coordinator'],
                     notification: APP_STATE.isApprover ? pendingApprovalCount.invoice : 0
                 },
+                { name: 'توقيعي', screen: 'userSignature', roles: ['admin', 'user', 'approver', 'coordinator'] },
                 { name: 'الإعدادات', screen: 'settings', roles: ['admin'] },
-                { name: `تسجيل الخروج`, screen: 'login', roles: ['admin', 'user', 'approver'], action: logout }
+                { name: `تسجيل الخروج`, screen: 'login', roles: ['admin', 'user', 'approver', 'coordinator'], action: logout }
             ];
 
             links.filter(link => link.roles.includes(APP_STATE.loggedInUser.role)).forEach(link => {
@@ -360,13 +497,74 @@
                 !DATA.approvedReports.some(ar => ar.reportId === r.id && ar.type === 'invoice')
             ).length;
             
-            return { kpi: kpiPending, invoice: invoicePending };
+            const monthlyPending = DATA.monthlyReports.filter(r => 
+                r.monthYear === currentMonth && 
+                !r.isApproved
+            ).length;
+            
+            return { kpi: kpiPending, invoice: invoicePending, monthly: monthlyPending };
+        }
+
+        function getUnreadNotificationCount() {
+            const userNotifications = DATA.notifications.filter(n => 
+                n.userId === APP_STATE.loggedInUser.id && !n.isRead
+            );
+            
+            const violationsCount = userNotifications.filter(n => n.type === 'violation').length;
+            const kpiCount = userNotifications.filter(n => n.type === 'kpi').length;
+            const monthlyCount = userNotifications.filter(n => n.type === 'monthly').length;
+            const invoiceCount = userNotifications.filter(n => n.type === 'invoice').length;
+            
+            return {
+                violations: violationsCount,
+                kpi: kpiCount,
+                monthly: monthlyCount,
+                invoice: invoiceCount,
+                total: userNotifications.length
+            };
+        }
+
+        function markNotificationsAsRead(type) {
+            DATA.notifications.forEach(notification => {
+                if (notification.userId === APP_STATE.loggedInUser.id && notification.type === type) {
+                    notification.isRead = true;
+                }
+            });
+            saveData();
+        }
+
+        function addNotification(userId, message, type) {
+            const notification = {
+                id: crypto.randomUUID(),
+                userId: userId,
+                message: message,
+                type: type,
+                isRead: false,
+                createdAt: new Date().toISOString()
+            };
+            
+            DATA.notifications.push(notification);
+            saveData();
+        }
+
+        // وظيفة عرض رسائل النجاح العابرة (بديل للـ modal)
+        function showSuccessToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'success-toast';
+            toast.textContent = message;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
         }
 
         function logout() {
             APP_STATE.loggedInUser = null;
             APP_STATE.isAdmin = false;
             APP_STATE.isApprover = false;
+            APP_STATE.isCoordinator = false;
             APP_STATE.currentSite = null;
             navigate('login');
         }
@@ -412,6 +610,7 @@
             APP_STATE.loggedInUser = user;
             APP_STATE.isAdmin = user.role === 'admin';
             APP_STATE.isApprover = user.role === 'approver';
+            APP_STATE.isCoordinator = user.role === 'coordinator';
             // إذا لم يكن أدمن، يتم تحديد موقعه المعني فقط
             APP_STATE.currentSite = DATA.settings.sites.find(s => APP_STATE.isAdmin ? s.id === (user.siteId || DATA.settings.sites[0]?.id) : s.id === user.siteId);
             APP_STATE.isAuthReady = true;
@@ -459,8 +658,8 @@
                 </div>
             `).join('');
 
-            // إشعارات للمعتمد
-            const approvalNotifications = APP_STATE.isApprover ? `
+            // إشعارات للمعتمد والمنسق
+            const approvalNotifications = (APP_STATE.isApprover || APP_STATE.isCoordinator) ? `
                 <div class="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <h3 class="text-xl font-semibold text-yellow-800 mb-2">إشعارات الاعتماد</h3>
                     <div class="space-y-2">
@@ -469,25 +668,43 @@
                 </div>
             ` : '';
 
+            // إشعارات المستخدم
+            const userNotifications = getUnreadNotificationCount().total > 0 ? `
+                <div class="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h3 class="text-xl font-semibold text-blue-800 mb-2">إشعارات جديدة</h3>
+                    <div class="space-y-2">
+                        ${getUserNotifications()}
+                    </div>
+                </div>
+            ` : '';
+
             mainContent.innerHTML = `
                 <div class="space-y-8">
                     <h2 class="text-3xl font-extrabold text-amber-900">مرحباً بك، ${APP_STATE.loggedInUser.name}</h2>
                     
-                    ${APP_STATE.isApprover ? `
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <button onclick="navigate('monthlyKPI')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
-                                عرض مؤشر الأداء الشهري
-                                ${getPendingApprovalCount().kpi > 0 ? `<span class="notification-badge">${getPendingApprovalCount().kpi}</span>` : ''}
-                            </button>
-                            <button onclick="navigate('monthlyInvoice')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
-                                عرض الفاتورة الشهرية
-                                ${getPendingApprovalCount().invoice > 0 ? `<span class="notification-badge">${getPendingApprovalCount().invoice}</span>` : ''}
-                            </button>
+                    ${(APP_STATE.isApprover || APP_STATE.isCoordinator) ? `
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            ${APP_STATE.isApprover ? `
+                                <button onclick="navigate('monthlyKPI')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
+                                    عرض مؤشر الأداء الشهري
+                                    ${getPendingApprovalCount().kpi > 0 ? `<span class="notification-badge">${getPendingApprovalCount().kpi}</span>` : ''}
+                                </button>
+                                <button onclick="navigate('monthlyInvoice')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
+                                    عرض الفاتورة الشهرية
+                                    ${getPendingApprovalCount().invoice > 0 ? `<span class="notification-badge">${getPendingApprovalCount().invoice}</span>` : ''}
+                                </button>
+                            ` : ''}
+                            ${APP_STATE.isCoordinator ? `
+                                <button onclick="navigate('monthlyReport')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold relative">
+                                    عرض التقرير الشهري
+                                    ${getPendingApprovalCount().monthly > 0 ? `<span class="notification-badge">${getPendingApprovalCount().monthly}</span>` : ''}
+                                </button>
+                            ` : ''}
                         </div>
                     ` : `
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <button onclick="navigate('dailyEvaluation')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">بدء تقييم يومي</button>
-                            <button onclick="navigate('monthlyKPI')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">مؤشر الأداء الشهري</button>
+                            <button onclick="navigate('monthlyEvaluation')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">التقييم الشهري</button>
                             <button onclick="navigate('violations')" class="p-6 bg-amber-600 text-white rounded-xl shadow-xl hover:bg-amber-700 transition duration-300 text-2xl font-bold">مخالفات المقاول</button>
                         </div>
                     `}
@@ -498,6 +715,7 @@
                     </div>
                     
                     ${approvalNotifications}
+                    ${userNotifications}
                 </div>
             `;
         }
@@ -514,14 +732,25 @@
                 !DATA.approvedReports.some(ar => ar.reportId === r.id && ar.type === 'invoice')
             );
             
+            const pendingMonthly = DATA.monthlyReports.filter(r => 
+                r.monthYear === currentMonth && 
+                !r.isApproved
+            );
+            
             let notifications = '';
             
-            if (pendingKPI.length > 0) {
-                notifications += `<p class="text-yellow-700">• لديك ${pendingKPI.length} تقرير أداء شهري بانتظار الاعتماد</p>`;
+            if (APP_STATE.isApprover) {
+                if (pendingKPI.length > 0) {
+                    notifications += `<p class="text-yellow-700">• لديك ${pendingKPI.length} تقرير أداء شهري بانتظار الاعتماد</p>`;
+                }
+                
+                if (pendingInvoices.length > 0) {
+                    notifications += `<p class="text-yellow-700">• لديك ${pendingInvoices.length} فاتورة شهرية بانتظار الاعتماد</p>`;
+                }
             }
             
-            if (pendingInvoices.length > 0) {
-                notifications += `<p class="text-yellow-700">• لديك ${pendingInvoices.length} فاتورة شهرية بانتظار الاعتماد</p>`;
+            if (APP_STATE.isCoordinator && pendingMonthly.length > 0) {
+                notifications += `<p class="text-yellow-700">• لديك ${pendingMonthly.length} تقرير شهري بانتظار الاعتماد</p>`;
             }
             
             if (notifications === '') {
@@ -531,31 +760,25 @@
             return notifications;
         }
 
+        function getUserNotifications() {
+            const userNotifications = DATA.notifications.filter(n => 
+                n.userId === APP_STATE.loggedInUser.id && !n.isRead
+            );
+            
+            if (userNotifications.length === 0) {
+                return '<p class="text-green-700">• لا توجد إشعارات جديدة</p>';
+            }
+            
+            return userNotifications.map(notification => 
+                `<p class="text-blue-700">• ${notification.message}</p>`
+            ).join('');
+        }
+
         // === 6. شاشة التقييم اليومي ===
         
         // وظيفة مساعدة لإيجاد تقرير ليوم معين وموقع معين
         function getReport(date, siteId) {
             return DATA.reports.find(r => r.date === date && r.siteId === siteId);
-        }
-
-        // وظيفة عرض رسالة التأكيد العابرة (Toast)
-        function showSuccessToast(message) {
-            const toastEl = document.getElementById('submission-message');
-            if (toastEl) {
-                toastEl.textContent = message;
-                toastEl.classList.remove('hidden', 'opacity-0');
-                toastEl.classList.add('opacity-100');
-
-                // إخفاء الرسالة بعد 3 ثوانٍ
-                setTimeout(() => {
-                    toastEl.classList.remove('opacity-100');
-                    toastEl.classList.add('opacity-0');
-                    // إخفاء العنصر بالكامل بعد انتهاء التلاشي (transition)
-                    setTimeout(() => {
-                        toastEl.classList.add('hidden');
-                    }, 500);
-                }, 3000);
-            }
         }
 
         function showDailyEvaluation(date = new Date().toISOString().split('T')[0]) {
@@ -564,6 +787,11 @@
 
             const site = APP_STATE.currentSite; // الموقع المخصص للمستخدم الحالي
             const currentReport = getReport(date, site.id);
+            
+            // التحقق من وجود تقرير مسبق لنفس اليوم ونفس الموقع
+            // تم تعديل الشرط: لا يتم إغلاق الشاشة أو منع التقييم إذا كان هناك تقرير مسبق
+            const isAlreadySubmitted = currentReport ? true : false;
+            
             const notes = currentReport ? currentReport.notes : '';
             
             // تهيئة المخالفات، إذا كان هناك تقرير سابق نستخدم مخالفاته، وإلا نبدأ بقائمة فارغة
@@ -651,14 +879,9 @@
                 </div>
 
                 <div class="mt-8 relative flex justify-between space-x-4 space-x-reverse">
-                    <!-- رسالة التأكيد العابرة -->
-                    <div id="submission-message" class="absolute hidden opacity-0 transition-opacity duration-500 bg-green-500 text-white py-2 px-4 rounded-lg font-bold shadow-lg top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-2">
-                        تم التقديم بنجاح
-                    </div>
-
                     <button onclick="navigate('dashboard')" class="app-btn bg-gray-500 hover:bg-gray-600">رجوع</button>
                     <button id="monthlyKPIBtn" onclick="navigate('monthlyKPI')" class="app-btn bg-amber-500 hover:bg-amber-600">مؤشر الأداء الشهري</button>
-                    <button id="submitReportBtn" class="app-btn bg-green-600 hover:bg-green-700">تقديم التقييم</button>
+                    <button id="submitReportBtn" class="app-btn bg-green-600 hover:bg-green-700">${isAlreadySubmitted ? 'تحديث التقييم' : 'تقديم التقييم'}</button>
                 </div>
             `;
 
@@ -672,6 +895,7 @@
                             <input type="date" id="reportDate" value="${date}" onchange="changeReportDate(this.value)" class="p-2 border rounded-lg">
                         </label>
                     </div>
+                    ${isAlreadySubmitted ? `<div class="p-4 bg-yellow-100 text-yellow-800 rounded-lg font-semibold">⚠️ تم تقديم تقييم لهذا اليوم مسبقاً. يمكنك تعديله إذا لزم الأمر.</div>` : ''}
                     ${tableHTML}
                 </div>
             `;
@@ -857,7 +1081,7 @@
             const reportIndex = DATA.reports.findIndex(r => r.date === reportDate && r.siteId === currentSiteId);
 
             const reportData = {
-                id: crypto.randomUUID(),
+                id: reportIndex !== -1 ? DATA.reports[reportIndex].id : crypto.randomUUID(),
                 userId: APP_STATE.loggedInUser.id,
                 userName: APP_STATE.loggedInUser.name,
                 siteId: currentSiteId,
@@ -866,22 +1090,263 @@
                 scores: scores,
                 kpiPercentage: percentage.toFixed(2),
                 violations: newViolations,
+                isSubmitted: true,
+                submittedAt: new Date().toISOString()
             };
 
             if (reportIndex !== -1) {
                 DATA.reports[reportIndex] = reportData;
+                showSuccessToast('تم تحديث التقييم بنجاح');
             } else {
                 DATA.reports.push(reportData);
+                showSuccessToast('تم تقديم التقييم بنجاح');
             }
 
             saveData();
-            showSuccessToast('تم التقديم بنجاح');
+            
+            // إضافة إشعارات للمعتمدين والمنسقين
+            if (newViolations.length > 0) {
+                const approverUsers = DATA.settings.users.filter(u => u.role === 'approver');
+                const coordinatorUsers = DATA.settings.users.filter(u => u.role === 'coordinator');
+                
+                approverUsers.forEach(user => {
+                    addNotification(user.id, `تم إضافة ${newViolations.length} مخالفة جديدة في ${APP_STATE.currentSite.name} تحتاج إلى مراجعة`, 'violation');
+                });
+                
+                coordinatorUsers.forEach(user => {
+                    addNotification(user.id, `تم إضافة ${newViolations.length} مخالفة جديدة في ${APP_STATE.currentSite.name} تحتاج إلى مراجعة`, 'violation');
+                });
+            }
         }
 
-        // === 7. شاشة المخالفات ===
+        // === 7. شاشة التقييم الشهري الجديدة ===
+
+        function showMonthlyEvaluation(monthYear = new Date().toISOString().substring(0, 7), siteId = null) {
+            setupHeaderAndNav('التقييم الشهري');
+
+            const sitesToView = APP_STATE.isAdmin ? DATA.settings.sites : [APP_STATE.currentSite];
+            const selectedSiteId = siteId || (APP_STATE.isAdmin ? sitesToView[0].id : APP_STATE.currentSite.id);
+
+            let contentHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-amber-900">التقييم الشهري</h2>
+                    
+                    <div class="flex flex-wrap items-center space-x-4 space-x-reverse gap-4 p-4 bg-amber-50 rounded-xl shadow-md">
+                        ${APP_STATE.isAdmin ? `
+                            <label for="site-select-monthly-eval" class="font-semibold text-amber-800">اختر المسلخ:</label>
+                            <select id="site-select-monthly-eval" class="p-2 border rounded-lg" onchange="renderMonthlyEvaluation(this.value, document.getElementById('month-select-monthly-eval').value)">
+                                ${sitesToView.map(s => `<option value="${s.id}" ${s.id === selectedSiteId ? 'selected' : ''}>${s.name}</option>`).join('')}
+                            </select>
+                        ` : `<input type="hidden" id="site-select-monthly-eval" value="${selectedSiteId}">`}
+
+                        <label for="month-select-monthly-eval" class="font-semibold text-amber-800">اختر الشهر:</label>
+                        <input type="month" id="month-select-monthly-eval" value="${monthYear}" class="p-2 border rounded-lg" onchange="renderMonthlyEvaluation(document.getElementById('site-select-monthly-eval').value, this.value)">
+                        <button onclick="saveMonthlyEvaluationChanges()" class="app-btn bg-green-600 text-sm">حفظ التغييرات</button>
+                    </div>
+
+                    <div id="monthly-evaluation-content" class="bg-white p-6 rounded-xl shadow-2xl overflow-x-auto">
+                        <!-- محتوى التقييم الشهري يظهر هنا -->
+                    </div>
+                </div>
+            `;
+            mainContent.innerHTML = contentHTML;
+
+            renderMonthlyEvaluation(selectedSiteId, monthYear);
+        }
+
+        function renderMonthlyEvaluation(siteId, monthYear) {
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const siteStaff = site.staff;
+            const kpiIndicators = DATA.settings.kpis;
+
+            // الحصول على جميع تقارير الشهر المحدد
+            const monthlyReports = DATA.reports.filter(r => 
+                r.siteId === siteId && 
+                r.date.startsWith(monthYear)
+            ).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // حساب عدد أيام الشهر
+            const year = parseInt(monthYear.split('-')[0]);
+            const month = parseInt(monthYear.split('-')[1]);
+            const daysInMonth = new Date(year, month, 0).getDate();
+
+            let tableHTML = `
+                <div class="overflow-x-auto">
+                <table class="monthly-evaluation-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="kpi-name">مؤشر التقييم</th>
+                            <th rowspan="2" class="staff-name">القوى العاملة</th>
+            `;
+
+            // إضافة أعمدة للأيام
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${monthYear}-${day.toString().padStart(2, '0')}`;
+                const report = monthlyReports.find(r => r.date === dateStr);
+                const hasReport = !!report;
+                const dateObj = new Date(dateStr);
+                const dayName = dateObj.toLocaleDateString('ar-SA', { weekday: 'short' });
+                
+                tableHTML += `
+                    <th class="text-center" title="${dateStr}">
+                        ${day}<br>${dayName}
+                    </th>
+                `;
+            }
+
+            tableHTML += `
+                        </tr>
+                        <tr>
+            `;
+
+            // إضافة أعمدة للمدخلين
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${monthYear}-${day.toString().padStart(2, '0')}`;
+                const report = monthlyReports.find(r => r.date === dateStr);
+                const userName = report ? report.userName : '-';
+                
+                tableHTML += `
+                    <th class="text-center text-xs bg-gray-100">
+                        ${userName}
+                    </th>
+                `;
+            }
+
+            tableHTML += `
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            // إضافة صفوف لكل مؤشر وعامل
+            kpiIndicators.forEach((kpi, kpiIndex) => {
+                const kpiName = kpi.name;
+                const requiredWorkers = kpi.workers;
+                
+                requiredWorkers.forEach(requiredRole => {
+                    siteStaff.forEach(staff => {
+                        if (staff.role === requiredRole) {
+                            tableHTML += `
+                                <tr>
+                                    <td class="kpi-name">${kpiName}</td>
+                                    <td class="staff-name">${staff.name} (${staff.role})</td>
+                            `;
+
+                            // إضافة خانات لكل يوم
+                            for (let day = 1; day <= daysInMonth; day++) {
+                                const dateStr = `${monthYear}-${day.toString().padStart(2, '0')}`;
+                                const report = monthlyReports.find(r => r.date === dateStr);
+                                const isChecked = report ? (report.scores[kpiIndex]?.[staff.id] || false) : false;
+                                const isDisabled = !report; // تعطيل إذا لم يكن هناك تقرير
+                                
+                                tableHTML += `
+                                    <td class="text-center">
+                                        ${isDisabled ? 
+                                            `<span class="text-gray-400">-</span>` : 
+                                            `<input type="checkbox" 
+                                                data-date="${dateStr}" 
+                                                data-kpi-index="${kpiIndex}" 
+                                                data-worker-id="${staff.id}"
+                                                class="form-checkbox h-4 w-4 text-amber-600 rounded" 
+                                                ${isChecked ? 'checked' : ''}>`
+                                        }
+                                    </td>
+                                `;
+                            }
+
+                            tableHTML += `</tr>`;
+                        }
+                    });
+                });
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+                </div>
+            `;
+
+            document.getElementById('monthly-evaluation-content').innerHTML = tableHTML;
+        }
+
+        function saveMonthlyEvaluationChanges() {
+            const siteId = document.getElementById('site-select-monthly-eval').value;
+            const monthYear = document.getElementById('month-select-monthly-eval').value;
+            
+            // جمع جميع التغييرات
+            const checkboxes = document.querySelectorAll('#monthly-evaluation-content input[type="checkbox"]');
+            const changes = {};
+            
+            checkboxes.forEach(cb => {
+                const date = cb.dataset.date;
+                const kpiIndex = parseInt(cb.dataset.kpiIndex);
+                const workerId = cb.dataset.workerId;
+                const isChecked = cb.checked;
+                
+                if (!changes[date]) {
+                    changes[date] = {};
+                }
+                
+                if (!changes[date][kpiIndex]) {
+                    changes[date][kpiIndex] = {};
+                }
+                
+                changes[date][kpiIndex][workerId] = isChecked;
+            });
+            
+            // تطبيق التغييرات على البيانات
+            Object.keys(changes).forEach(date => {
+                const reportIndex = DATA.reports.findIndex(r => r.date === date && r.siteId === siteId);
+                
+                if (reportIndex !== -1) {
+                    // تحديث التقرير الموجود
+                    Object.keys(changes[date]).forEach(kpiIndex => {
+                        DATA.reports[reportIndex].scores[kpiIndex] = {
+                            ...DATA.reports[reportIndex].scores[kpiIndex],
+                            ...changes[date][kpiIndex]
+                        };
+                    });
+                    
+                    // إعادة حساب نسبة الأداء
+                    const report = DATA.reports[reportIndex];
+                    const site = DATA.settings.sites.find(s => s.id === siteId);
+                    const { percentage } = calculateKPIForReport(report, site);
+                    report.kpiPercentage = percentage.toFixed(2);
+                }
+            });
+            
+            saveData();
+            showSuccessToast('تم حفظ التغييرات بنجاح');
+        }
+
+        function calculateKPIForReport(report, site) {
+            let totalPossibleScore = 0;
+            let actualScore = 0;
+
+            // حساب العدد الكلي للنقاط الممكنة (عدد المؤشرات * عدد العمال المعنيين)
+            DATA.settings.kpis.forEach((kpi, kpiIndex) => {
+                kpi.workers.forEach(requiredRole => {
+                    site.staff.forEach(staff => {
+                        if (staff.role === requiredRole) {
+                            totalPossibleScore++;
+                            const workerKey = staff.id;
+                            if (report.scores[kpiIndex] && report.scores[kpiIndex][workerKey]) {
+                                actualScore++;
+                            }
+                        }
+                    });
+                });
+            });
+
+            const percentage = totalPossibleScore > 0 ? (actualScore / totalPossibleScore) * 100 : 0;
+            return { percentage, totalPossibleScore, actualScore };
+        }
+
+        // === 8. شاشة المخالفات ===
 
         function showViolations() {
             setupHeaderAndNav('شاشة مخالفات المقاول');
+            markNotificationsAsRead('violation');
 
             let allViolations = DATA.reports.flatMap(r => r.violations.map(v => ({
                 ...v,
@@ -966,27 +1431,29 @@
                 if (violation) {
                     violation.isClosed = true;
                     saveData();
-                    showModal('تم الإغلاق', 'تم إغلاق المخالفة بنجاح وستخصم من الفاتورة الشهرية.', 'violations');
+                    showSuccessToast('تم إغلاق المخالفة بنجاح وستخصم من الفاتورة الشهرية.');
+                    navigate('violations');
                     return;
                 }
             }
             showModal('خطأ', 'لم يتم العثور على المخالفة لإغلاقها.', 'violations');
         }
 
-        // === 8. شاشة مؤشر الأداء الشهري (تعديل الهيكل) ===
+        // === 9. شاشة مؤشر الأداء الشهري ===
 
         function showMonthlyKPI() {
             setupHeaderAndNav('مؤشر الأداء الشهري');
+            markNotificationsAsRead('kpi');
 
             const isApprover = APP_STATE.isApprover;
-            const sitesToView = APP_STATE.isAdmin || isApprover ? DATA.settings.sites : [APP_STATE.currentSite];
+            const sitesToView = APP_STATE.isAdmin || isApprover || APP_STATE.isCoordinator ? DATA.settings.sites : [APP_STATE.currentSite];
 
             let contentHTML = `
                 <div class="space-y-6">
                     <h2 class="text-3xl font-extrabold text-amber-900">تقرير مؤشر الأداء الشهري</h2>
                     
                     <div class="flex flex-wrap items-center space-x-4 space-x-reverse gap-4 p-4 bg-amber-50 rounded-xl shadow-md">
-                        ${(APP_STATE.isAdmin || isApprover) ? `
+                        ${(APP_STATE.isAdmin || isApprover || APP_STATE.isCoordinator) ? `
                             <label for="site-select-kpi" class="font-semibold text-amber-800">اختر المسلخ:</label>
                             <select id="site-select-kpi" class="p-2 border rounded-lg" onchange="renderKPIReport(this.value, document.getElementById('month-select-kpi').value)">
                                 ${sitesToView.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
@@ -997,6 +1464,7 @@
                         <input type="month" id="month-select-kpi" value="${new Date().toISOString().substring(0, 7)}" class="p-2 border rounded-lg" onchange="renderKPIReport(document.getElementById('site-select-kpi').value, this.value)">
                         <button onclick="exportKPIReportToPDF()" class="app-btn text-sm">تصدير التقرير (PDF)</button>
                         ${APP_STATE.isApprover ? `<button onclick="approveKPIReport()" class="app-btn bg-green-600 text-sm">اعتماد التقرير</button>` : ''}
+                        ${!APP_STATE.isApprover && !APP_STATE.isCoordinator ? `<button onclick="submitKPIReport()" class="app-btn bg-blue-600 text-sm">تقديم للاعتماد</button>` : ''}
                     </div>
 
                     <div id="kpi-report-content" class="bg-white p-6 rounded-xl shadow-2xl overflow-x-auto">
@@ -1057,6 +1525,10 @@
                 .pop();
             const dataEntryUser = lastDayReport ? lastDayReport.userName : 'غير معروف';
             
+            // الحصول على توقيع المدخل
+            const dataEntryUserObj = DATA.settings.users.find(u => u.name === dataEntryUser);
+            const dataEntryUserSignature = dataEntryUserObj ? dataEntryUserObj.signature : null;
+            
             // التحقق مما إذا كان التقرير معتمداً
             const isApproved = DATA.approvedReports.some(ar => 
                 ar.siteId === siteId && 
@@ -1064,13 +1536,21 @@
                 ar.type === 'kpi'
             );
             
+            // الحصول على توقيع المعتمد
+            const approverUser = DATA.settings.users.find(u => u.role === 'approver');
+            const approverSignature = isApproved ? approverUser.signature : null;
+            
             let totalOverallPercentage = 0;
             let totalCategories = 0;
             let tableHTML = '';
 
             tableHTML += `
-                <div id="kpi-report-printable" class="p-2 border-2 border-amber-800 rounded-lg bg-white shadow-xl" style="min-width: 1000px;">
-                    <h3 class="text-3xl font-extrabold text-center text-amber-900 my-4">المؤشرات الرئيسية للأداء</h3>
+                <div id="kpi-report-printable" class="p-2 border-2 border-amber-800 rounded-lg bg-white shadow-xl relative" style="min-width: 1000px;">
+                    <div class="flex justify-between items-center mb-4">
+                        <img src="${DATA.settings.kpiImageUrl}" alt="صورة المؤشر" class="w-32 h-32 rounded-lg">
+                        <h3 class="text-3xl font-extrabold text-center text-amber-900 my-4">المؤشرات الرئيسية للأداء</h3>
+                        <div></div>
+                    </div>
                     <div class="flex justify-between items-center text-sm mb-4 border-b pb-2 font-medium">
                         <p>المسلخ: <span class="text-amber-700 font-bold">${site.name}</span></p>
                         <p>المقاول: <span class="text-amber-700 font-bold">${operatorName}</span></p>
@@ -1157,11 +1637,47 @@
                         </tbody>
                     </table>
                     </div>
+                    
+                    <div class="flex justify-between mt-8 text-center text-base">
+                        <div class="flex flex-col">
+                            <p class="font-semibold border-b border-gray-400 mb-2">المدخل (${dataEntryUser})</p>
+                            ${dataEntryUserSignature ? 
+                                `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${dataEntryUserSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="توقيع المدخل"></div>` : 
+                                `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">لا يوجد توقيع</div>`
+                            }
+                        </div>
+                        <div class="flex flex-col">
+                            <p class="font-semibold border-b border-gray-400 mb-2">اعتماد المسؤول</p>
+                            ${APP_STATE.isApprover ? createSignatureArea(DATA.settings.users.find(u => u.role === 'approver'), 'kpi') : 
+                                `<div class="mt-2 p-2 border rounded-lg bg-white">
+                                    ${isApproved && approverSignature ? 
+                                        `<img src="${approverSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع">` : 
+                                        `<p class="text-sm text-gray-500">سيظهر التوقيع بعد الاعتماد</p>`
+                                    }
+                                </div>`
+                            }
+                            <p class="text-xs mt-1 text-gray-500">${isApproved ? 'تم الاعتماد' : 'مطلوب توقيع'}</p>
+                        </div>
+                    </div>
                 </div>
             `;
             
             const content = document.getElementById('kpi-report-content');
             content.innerHTML = tableHTML;
+        }
+        
+        function submitKPIReport() {
+            const siteId = document.getElementById('site-select-kpi').value;
+            const monthYear = document.getElementById('month-select-kpi').value;
+            
+            // إضافة إشعارات للمعتمدين
+            const approverUsers = DATA.settings.users.filter(u => u.role === 'approver');
+            
+            approverUsers.forEach(user => {
+                addNotification(user.id, `تم تقديم تقرير مؤشر الأداء الشهري لـ ${DATA.settings.sites.find(s => s.id === siteId).name} - ${monthYear} يحتاج إلى اعتماد`, 'kpi');
+            });
+            
+            showSuccessToast('تم تقديم التقرير للاعتماد بنجاح');
         }
         
         function approveKPIReport() {
@@ -1180,7 +1696,17 @@
             
             DATA.approvedReports.push(approvalRecord);
             saveData();
-            showModal('تم الاعتماد', 'تم اعتماد تقرير مؤشر الأداء الشهري بنجاح.', 'monthlyKPI');
+            
+            // إضافة إشعار للمستخدم المعني
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const siteUsers = DATA.settings.users.filter(u => u.siteId === siteId || u.role === 'admin');
+            
+            siteUsers.forEach(user => {
+                addNotification(user.id, `تم اعتماد تقرير مؤشر الأداء الشهري لـ ${site.name} - ${monthYear}`, 'kpi');
+            });
+            
+            showSuccessToast('تم اعتماد تقرير مؤشر الأداء الشهري بنجاح.');
+            navigate('monthlyKPI');
         }
         
         function exportKPIReportToPDF() {
@@ -1192,45 +1718,290 @@
             html2canvas(element, {
                 scale: 2,
                 useCORS: true,
-                logging: false
+                logging: false,
+                width: element.scrollWidth,
+                height: element.scrollHeight,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight
             }).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
                 const imgWidth = 280;
-                const pageHeight = 200;
                 const imgHeight = canvas.height * imgWidth / canvas.width;
-                let heightLeft = imgHeight;
                 
-                let position = 10;
-                
-                doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-                
-                while (heightLeft >= 0) {
-                    position = heightLeft - imgHeight;
-                    doc.addPage();
-                    doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                    heightLeft -= pageHeight;
-                }
-                
+                // إضافة الصورة بحيث تملأ الصفحة
+                doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
                 doc.save('تقرير_مؤشر_الأداء_الشهري.pdf');
             });
         }
 
-        // === 9. شاشة الفاتورة الشهرية ===
+        // === 10. شاشة التقرير الشهري ===
 
-        function showMonthlyInvoice() {
-            setupHeaderAndNav('الفاتورة الشهرية للمقاول');
+        function showMonthlyReport() {
+            setupHeaderAndNav('التقرير الشهري');
+            markNotificationsAsRead('monthly');
 
-            const isApprover = APP_STATE.isApprover;
-            // تم تعديل الصلاحية: المستخدم العادي يمكنه عرض الفاتورة لموقعه فقط
-            const sitesToView = APP_STATE.isAdmin || isApprover ? DATA.settings.sites : [APP_STATE.currentSite];
+            const isCoordinator = APP_STATE.isCoordinator;
+            const sitesToView = APP_STATE.isAdmin || isCoordinator ? DATA.settings.sites : [APP_STATE.currentSite];
 
             let contentHTML = `
                 <div class="space-y-6">
-                    <h2 class="text-3xl font-extrabold text-amber-900">إنشاء واعتماد الفاتورة الشهرية</h2>
+                    <h2 class="text-3xl font-extrabold text-amber-900">التقرير الشهري</h2>
+                    
+                    <div class="flex flex-wrap items-center space-x-4 space-x-reverse gap-4 p-4 bg-amber-50 rounded-xl shadow-md">
+                        ${(APP_STATE.isAdmin || isCoordinator) ? `
+                            <label for="site-select-monthly" class="font-semibold text-amber-800">اختر المسلخ:</label>
+                            <select id="site-select-monthly" class="p-2 border rounded-lg" onchange="renderMonthlyReport(this.value, document.getElementById('month-select-monthly').value)">
+                                ${sitesToView.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+                        ` : `<input type="hidden" id="site-select-monthly" value="${APP_STATE.currentSite.id}">`}
+
+                        <label for="month-select-monthly" class="font-semibold text-amber-800">اختر الشهر:</label>
+                        <input type="month" id="month-select-monthly" value="${new Date().toISOString().substring(0, 7)}" class="p-2 border rounded-lg" onchange="renderMonthlyReport(document.getElementById('site-select-monthly').value, this.value)">
+                        <button onclick="exportMonthlyReportToPDF()" class="app-btn text-sm">تصدير التقرير (PDF)</button>
+                        ${APP_STATE.isCoordinator ? `<button onclick="approveMonthlyReport()" class="app-btn bg-green-600 text-sm">اعتماد التقرير</button>` : ''}
+                        ${!APP_STATE.isCoordinator ? `<button onclick="submitMonthlyReport()" class="app-btn bg-blue-600 text-sm">تقديم للاعتماد</button>` : ''}
+                    </div>
+
+                    <div id="monthly-report-content" class="bg-white p-6 rounded-xl shadow-2xl overflow-x-auto">
+                        <!-- محتوى التقرير يظهر هنا -->
+                    </div>
+                </div>
+            `;
+            mainContent.innerHTML = contentHTML;
+
+            const initialSiteId = sitesToView[0].id;
+            renderMonthlyReport(initialSiteId, document.getElementById('month-select-monthly').value);
+        }
+
+        function renderMonthlyReport(siteId, monthYear) {
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const operatorName = site.operator;
+            const contractNumber = site.contract;
+            
+            // الحصول على اسم المستخدم المدخل للبيانات في آخر يوم من الشهر
+            const filteredReports = DATA.reports.filter(r => r.siteId === siteId && r.date.startsWith(monthYear));
+            const lastDayOfMonth = new Date(new Date(monthYear).getFullYear(), new Date(monthYear).getMonth() + 1, 0).getDate();
+            const lastDayReport = filteredReports
+                .filter(r => r.date === `${monthYear}-${lastDayOfMonth.toString().padStart(2, '0')}`)
+                .pop();
+            const dataEntryUser = lastDayReport ? lastDayReport.userName : 'غير معروف';
+            
+            // الحصول على توقيع المدخل
+            const dataEntryUserObj = DATA.settings.users.find(u => u.name === dataEntryUser);
+            const dataEntryUserSignature = dataEntryUserObj ? dataEntryUserObj.signature : null;
+            
+            // التحقق مما إذا كان التقرير معتمداً
+            const existingMonthlyReport = DATA.monthlyReports.find(r => 
+                r.siteId === siteId && 
+                r.monthYear === monthYear
+            );
+            const isApproved = existingMonthlyReport ? existingMonthlyReport.isApproved : false;
+            
+            // الحصول على توقيع المنسق
+            const coordinatorUser = DATA.settings.users.find(u => u.role === 'coordinator');
+            const coordinatorSignature = isApproved ? coordinatorUser.signature : null;
+            
+            // حساب المخالفات لهذا الشهر
+            const monthlyViolations = DATA.reports.flatMap(r => r.violations)
+                .filter(v => v.siteId === siteId && v.reportDate.startsWith(monthYear) && v.isClosed);
+            
+            // تجميع المخالفات حسب النوع
+            const violationCounts = {};
+            DATA.settings.violations.forEach(v => {
+                violationCounts[v.id] = {
+                    name: v.name,
+                    unit: v.unit,
+                    count: 0,
+                    notes: ''
+                };
+            });
+            
+            monthlyViolations.forEach(v => {
+                if (violationCounts[v.violationId]) {
+                    violationCounts[v.violationId].count++;
+                    if (v.notes) {
+                        violationCounts[v.violationId].notes += (violationCounts[v.violationId].notes ? '، ' : '') + v.notes;
+                    }
+                }
+            });
+            
+            // بناء جدول المخالفات
+            const violationRows = Object.values(violationCounts).map(v => `
+                <tr>
+                    <td class="border px-4 py-2 text-right">${v.name}</td>
+                    <td class="border px-4 py-2 text-center">${v.unit}</td>
+                    <td class="border px-4 py-2 text-center">${v.count}</td>
+                    <td class="border px-4 py-2 text-right">${v.notes || ''}</td>
+                </tr>
+            `).join('');
+            
+            // تصميم التقرير الشهري المبسط
+            const monthlyReportHTML = `
+                <div id="monthly-report-printable" class="p-8 border-4 border-amber-800 rounded-2xl shadow-2xl bg-white relative" style="min-width: 1200px;">
+                    <div class="text-center mb-6">
+                        <h1 class="text-4xl font-extrabold text-amber-900 mb-2">التقرير الشهري</h1>
+                        <div class="flex justify-between items-center text-lg">
+                            <p>الشهر: <span class="font-bold">${getMonthName(monthYear)}</span></p>
+                            <p>السنة: <span class="font-bold">${monthYear.split('-')[0]}</span></p>
+                        </div>
+                        <div class="text-lg mt-2">
+                            <p>${site.name}</p>
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <p class="text-xl font-bold">المتعهد: <span class="text-amber-800">${operatorName}</span></p>
+                        <p class="text-lg">رقم العقد: <span class="font-bold">${contractNumber}</span></p>
+                    </div>
+
+                    <div class="mb-6">
+                        <h2 class="text-2xl font-bold mb-2">مخالفات العقد</h2>
+                        <div class="overflow-x-auto">
+                            <table class="monthly-report-table">
+                                <thead>
+                                    <tr>
+                                        <th>نوع المخالفة</th>
+                                        <th>الوحدة</th>
+                                        <th>العدد</th>
+                                        <th>ملاحظات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${violationRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between mt-8 text-center text-base">
+                        <div class="flex flex-col">
+                            <p class="font-semibold border-b border-gray-400 mb-2">المدخل (${dataEntryUser})</p>
+                            ${dataEntryUserSignature ? 
+                                `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${dataEntryUserSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="توقيع المدخل"></div>` : 
+                                `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">لا يوجد توقيع</div>`
+                            }
+                        </div>
+                        <div class="flex flex-col">
+                            <p class="font-semibold border-b border-gray-400 mb-2">اعتماد رئيس الشعبة</p>
+                            ${APP_STATE.isCoordinator ? createSignatureArea(DATA.settings.users.find(u => u.role === 'coordinator'), 'monthly') : 
+                                `<div class="mt-2 p-2 border rounded-lg bg-white">
+                                    ${isApproved && coordinatorSignature ? 
+                                        `<img src="${coordinatorSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع">` : 
+                                        `<p class="text-sm text-gray-500">سيظهر التوقيع بعد الاعتماد</p>`
+                                    }
+                                </div>`
+                            }
+                            <p class="text-xs mt-1 text-gray-500">${isApproved ? 'تم الاعتماد' : 'مطلوب توقيع'}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('monthly-report-content').innerHTML = monthlyReportHTML;
+        }
+
+        function getMonthName(monthYear) {
+            const months = [
+                'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+                'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+            ];
+            const monthIndex = parseInt(monthYear.split('-')[1]) - 1;
+            return months[monthIndex] || 'غير معروف';
+        }
+
+        function submitMonthlyReport() {
+            const siteId = document.getElementById('site-select-monthly').value;
+            const monthYear = document.getElementById('month-select-monthly').value;
+            
+            // إضافة إشعارات للمنسقين
+            const coordinatorUsers = DATA.settings.users.filter(u => u.role === 'coordinator');
+            
+            coordinatorUsers.forEach(user => {
+                addNotification(user.id, `تم تقديم التقرير الشهري لـ ${DATA.settings.sites.find(s => s.id === siteId).name} - ${monthYear} يحتاج إلى اعتماد`, 'monthly');
+            });
+            
+            showSuccessToast('تم تقديم التقرير للاعتماد بنجاح');
+        }
+
+        function approveMonthlyReport() {
+            const siteId = document.getElementById('site-select-monthly').value;
+            const monthYear = document.getElementById('month-select-monthly').value;
+            
+            const existingReportIndex = DATA.monthlyReports.findIndex(r => 
+                r.siteId === siteId && 
+                r.monthYear === monthYear
+            );
+            
+            if (existingReportIndex !== -1) {
+                DATA.monthlyReports[existingReportIndex].isApproved = true;
+                DATA.monthlyReports[existingReportIndex].approvedBy = APP_STATE.loggedInUser.id;
+                DATA.monthlyReports[existingReportIndex].approvedAt = new Date().toISOString();
+            } else {
+                DATA.monthlyReports.push({
+                    id: crypto.randomUUID(),
+                    siteId: siteId,
+                    monthYear: monthYear,
+                    isApproved: true,
+                    approvedBy: APP_STATE.loggedInUser.id,
+                    approvedAt: new Date().toISOString(),
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+            saveData();
+            
+            // إضافة إشعار للمستخدم المعني
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const siteUsers = DATA.settings.users.filter(u => u.siteId === siteId || u.role === 'admin');
+            
+            siteUsers.forEach(user => {
+                addNotification(user.id, `تم اعتماد التقرير الشهري لـ ${site.name} - ${monthYear}`, 'monthly');
+            });
+            
+            showSuccessToast('تم اعتماد التقرير الشهري بنجاح.');
+            navigate('monthlyReport');
+        }
+
+        function exportMonthlyReportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            
+            const element = document.getElementById('monthly-report-printable');
+            
+            html2canvas(element, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                width: element.scrollWidth,
+                height: element.scrollHeight,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const imgWidth = 280;
+                const imgHeight = canvas.height * imgWidth / canvas.width;
+                
+                doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
+                doc.save('التقرير_الشهري.pdf');
+            });
+        }
+
+        // === 11. شاشة الفاتورة الشهرية ===
+
+        function showMonthlyInvoice() {
+            setupHeaderAndNav('الفاتورة الشهرية');
+            markNotificationsAsRead('invoice');
+
+            const isApprover = APP_STATE.isApprover;
+            // تم تعديل الصلاحية: المستخدم العادي يمكنه عرض الفاتورة لموقعه فقط
+            const sitesToView = APP_STATE.isAdmin || isApprover || APP_STATE.isCoordinator ? DATA.settings.sites : [APP_STATE.currentSite];
+
+            let contentHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-amber-900">مرجع الفاتورة الشهري</h2>
                     
                     <div class="flex flex-wrap items-center space-x-4 space-x-reverse">
-                        ${(APP_STATE.isAdmin || isApprover) ? `
+                        ${(APP_STATE.isAdmin || isApprover || APP_STATE.isCoordinator) ? `
                             <label for="site-select-invoice" class="font-semibold text-amber-800">اختر المسلخ:</label>
                             <select id="site-select-invoice" class="p-2 border rounded-lg" onchange="renderInvoice(this.value, document.getElementById('month-select-invoice').value)">
                                 ${sitesToView.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
@@ -1241,6 +2012,7 @@
                         <input type="month" id="month-select-invoice" value="${new Date().toISOString().substring(0, 7)}" class="p-2 border rounded-lg" onchange="renderInvoice(document.getElementById('site-select-invoice').value, this.value)">
                         <button onclick="exportInvoiceToPDF()" class="app-btn text-sm">تصدير الفاتورة (PDF)</button>
                         ${APP_STATE.isApprover ? `<button onclick="approveInvoice()" class="app-btn bg-green-600 text-sm">اعتماد الفاتورة</button>` : ''}
+                        ${!APP_STATE.isApprover ? `<button onclick="submitInvoice()" class="app-btn bg-blue-600 text-sm">تقديم للاعتماد</button>` : ''}
                     </div>
 
                     <div id="invoice-content" class="bg-white p-6 rounded-xl shadow-2xl overflow-x-auto">
@@ -1252,6 +2024,92 @@
 
             const initialSiteId = sitesToView[0].id;
             renderInvoice(initialSiteId, document.getElementById('month-select-invoice').value);
+        }
+
+        // دالة محسنة لتحويل الأرقام إلى أحرف عربية (تتجاهل الأصفار على اليسار)
+        function numberToArabicWords(number) {
+            // تحويل الرقم إلى سلسلة وإزالة الأصفار غير المعنوية على اليسار
+            const numStr = parseFloat(number).toString();
+            
+            // فصل الجزء الصحيح والجزء العشري
+            const parts = numStr.split('.');
+            const integerPart = parseInt(parts[0]);
+            const decimalPart = parts.length > 1 ? parseInt(parts[1]) : 0;
+            
+            const units = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
+            const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+            const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+            const hundreds = ['', 'مائة', 'مئتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+            
+            if (integerPart === 0 && decimalPart === 0) return 'صفر درهم';
+            
+            let result = '';
+            
+            // معالجة الآلاف
+            if (integerPart >= 1000) {
+                const thousands = Math.floor(integerPart / 1000);
+                if (thousands === 1) {
+                    result += 'ألف';
+                } else if (thousands === 2) {
+                    result += 'ألفان';
+                } else if (thousands >= 3 && thousands <= 10) {
+                    result += units[thousands] + ' آلاف';
+                } else {
+                    result += numberToArabicWords(thousands) + ' ألف';
+                }
+                const remainder = integerPart % 1000;
+                if (remainder > 0) result += ' و ';
+                number = remainder;
+            } else {
+                number = integerPart;
+            }
+            
+            // معالجة المئات
+            if (number >= 100) {
+                const hundred = Math.floor(number / 100);
+                result += hundreds[hundred];
+                number %= 100;
+                if (number > 0) result += ' و ';
+            }
+            
+            // معالجة العشرات والآحاد
+            if (number > 0) {
+                if (number < 10) {
+                    result += units[number];
+                } else if (number < 20) {
+                    result += teens[number - 10];
+                } else {
+                    const ten = Math.floor(number / 10);
+                    const unit = number % 10;
+                    if (unit === 0) {
+                        result += tens[ten];
+                    } else {
+                        result += units[unit] + ' و ' + tens[ten];
+                    }
+                }
+            }
+            
+            // إضافة الجزء العشري إذا كان موجوداً
+            if (decimalPart > 0) {
+                result += ' درهم و ';
+                if (decimalPart < 10) {
+                    result += units[decimalPart] + ' فلساً';
+                } else if (decimalPart < 20) {
+                    result += teens[decimalPart - 10] + ' فلساً';
+                } else {
+                    const ten = Math.floor(decimalPart / 10);
+                    const unit = decimalPart % 10;
+                    if (unit === 0) {
+                        result += tens[ten] + ' فلساً';
+                    } else {
+                        result += units[unit] + ' و ' + tens[ten] + ' فلساً';
+                    }
+                }
+            } else {
+                result += ' درهم';
+            }
+            
+            return result;
         }
 
         function renderInvoice(siteId, monthYear) {
@@ -1283,6 +2141,9 @@
                 ar.monthYear === monthYear && 
                 ar.type === 'invoice'
             );
+            
+            // الحصول على توقيع المعتمد
+            const approverSignature = isApproved ? approverUser.signature : null;
             
             // 1. حساب الإجماليات
             let itemsTotal = 0;
@@ -1331,7 +2192,10 @@
             // 4. القيمة النهائية
             const finalValue = totalBeforeAdjustments + kpiAdjustment - closedViolationsValue;
             
-            // بناء جدول الفاتورة
+            // تحويل المبلغ إلى أحرف باستخدام الدالة المحسنة
+            const amountInWords = numberToArabicWords(finalValue);
+            
+            // بناء جدول الفاتورة الموسع
             const invoiceTableRows = itemDetails.map(d => `
                 <tr>
                     <td class="border px-4 py-2">${d.index}</td>
@@ -1342,20 +2206,15 @@
                 </tr>
             `).join('');
 
-            const approverSignatureHtml = approverUser.signature ? 
-                `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${approverUser.signature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع"></div>` : 
-                `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">غير معتمد بعد</div>`;
-
             const dataEntrySignatureHtml = dataEntryUserSignature ? 
                 `<div class="mt-2 p-2 border rounded-lg bg-white"><img src="${dataEntryUserSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="توقيع المدخل"></div>` : 
                 `<div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100 text-sm text-gray-500">لا يوجد توقيع</div>`;
 
-            // تصميم الفاتورة بنسق Landscape
+            // تصميم الفاتورة الموسعة بنسق Landscape
             const invoiceHTML = `
-                <div id="invoice-printable" class="p-8 border-4 border-amber-800 rounded-2xl shadow-2xl bg-white" style="min-width: 1200px;">
+                <div id="invoice-printable" class="p-8 border-4 border-amber-800 rounded-2xl shadow-2xl bg-white relative" style="min-width: 1200px;">
                     <div class="flex justify-between items-center mb-6 border-b-2 border-amber-500 pb-4">
-                        <img src="${DATA.settings.splashImageUrl}" alt="شعار" class="w-20 h-20 rounded-full">
-                        <h1 class="text-4xl font-extrabold text-amber-900">فاتورة خدمات المقاول الشهرية</h1>
+                        <h1 class="text-4xl font-extrabold text-amber-900">مرجع الفاتورة الشهري</h1>
                         <div class="text-sm text-right">
                             <p class="font-semibold">رقم الفاتورة: <span class="text-amber-700">${invoiceNumber}</span></p>
                             <p>تاريخ الفاتورة: <span class="text-amber-700">${invoiceDate}</span></p>
@@ -1369,6 +2228,7 @@
                         <p>رقم العقد: <span class="font-bold text-amber-800">${contractNumber}</span></p>
                         <p>الشهر: <span class="font-bold text-amber-800">${monthYear}</span></p>
                         <p>المدخل: <span class="font-bold text-amber-800">${dataEntryUser}</span></p>
+                        <p>مؤشر الأداء: <span class="font-bold text-amber-800">${averageKPI}%</span></p>
                     </div>
                     
                     <div class="overflow-x-auto">
@@ -1412,6 +2272,10 @@
                     </table>
                     </div>
 
+                    <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <p class="text-lg font-bold text-blue-800 text-center">${amountInWords} فقط لا غير</p>
+                    </div>
+
                     <div class="flex justify-between mt-8 text-center text-base">
                         <div class="flex flex-col">
                             <p class="font-semibold border-b border-gray-400 mb-2">المدخل (${dataEntryUser})</p>
@@ -1419,14 +2283,35 @@
                         </div>
                         <div class="flex flex-col">
                             <p class="font-semibold border-b border-gray-400 mb-2">اعتماد المسؤول (${approverUser.name})</p>
-                            ${APP_STATE.isApprover ? createSignatureArea(approverUser) : approverSignatureHtml}
-                            <p class="text-xs mt-1 text-gray-500">${approverUser.signature ? 'تم الاعتماد' : 'مطلوب توقيع'}</p>
+                            ${APP_STATE.isApprover ? createSignatureArea(approverUser, 'invoice') : 
+                                `<div class="mt-2 p-2 border rounded-lg bg-white">
+                                    ${isApproved && approverSignature ? 
+                                        `<img src="${approverSignature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع">` : 
+                                        `<p class="text-sm text-gray-500">سيظهر التوقيع بعد الاعتماد</p>`
+                                    }
+                                </div>`
+                            }
+                            <p class="text-xs mt-1 text-gray-500">${isApproved ? 'تم الاعتماد' : 'مطلوب توقيع'}</p>
                         </div>
                     </div>
                 </div>
             `;
             document.getElementById('invoice-content').innerHTML = invoiceHTML;
             document.getElementById('invoice-print-view').innerHTML = invoiceHTML; 
+        }
+
+        function submitInvoice() {
+            const siteId = document.getElementById('site-select-invoice').value;
+            const monthYear = document.getElementById('month-select-invoice').value;
+            
+            // إضافة إشعارات للمعتمدين
+            const approverUsers = DATA.settings.users.filter(u => u.role === 'approver');
+            
+            approverUsers.forEach(user => {
+                addNotification(user.id, `تم تقديم الفاتورة الشهرية لـ ${DATA.settings.sites.find(s => s.id === siteId).name} - ${monthYear} يحتاج إلى اعتماد`, 'invoice');
+            });
+            
+            showSuccessToast('تم تقديم الفاتورة للاعتماد بنجاح');
         }
 
         function approveInvoice() {
@@ -1445,7 +2330,17 @@
             
             DATA.approvedReports.push(approvalRecord);
             saveData();
-            showModal('تم الاعتماد', 'تم اعتماد الفاتورة الشهرية بنجاح.', 'monthlyInvoice');
+            
+            // إضافة إشعار للمستخدم المعني
+            const site = DATA.settings.sites.find(s => s.id === siteId);
+            const siteUsers = DATA.settings.users.filter(u => u.siteId === siteId || u.role === 'admin');
+            
+            siteUsers.forEach(user => {
+                addNotification(user.id, `تم اعتماد الفاتورة الشهرية لـ ${site.name} - ${monthYear}`, 'invoice');
+            });
+            
+            showSuccessToast('تم اعتماد الفاتورة الشهرية بنجاح.');
+            navigate('monthlyInvoice');
         }
 
         function exportInvoiceToPDF() {
@@ -1457,53 +2352,92 @@
             html2canvas(element, {
                 scale: 2,
                 useCORS: true,
-                logging: false
+                logging: false,
+                width: element.scrollWidth,
+                height: element.scrollHeight,
+                windowWidth: element.scrollWidth,
+                windowHeight: element.scrollHeight
             }).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
                 const imgWidth = 280;
-                const pageHeight = 200;
                 const imgHeight = canvas.height * imgWidth / canvas.width;
-                let heightLeft = imgHeight;
                 
-                let position = 10;
-                
-                doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                heightLeft -= pageHeight;
-                
-                while (heightLeft >= 0) {
-                    position = heightLeft - imgHeight;
-                    doc.addPage();
-                    doc.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-                    heightLeft -= pageHeight;
-                }
-                
+                // إضافة الصورة بحيث تملأ الصفحة
+                doc.addImage(imgData, 'PNG', 10, 10, imgWidth, imgHeight);
                 doc.save('فاتورة_خدمات_المقاول.pdf');
             });
         }
 
-        function createSignatureArea(user) {
+        // === 12. شاشة توقيع المستخدم ===
+
+        function showUserSignature() {
+            setupHeaderAndNav('توقيعي الشخصي');
+            
+            const user = APP_STATE.loggedInUser;
             const signature = user.signature;
-            if (signature) {
-                return `
-                    <div class="mt-2 p-2 border rounded-lg bg-white">
-                        <img id="signatureImage" src="${signature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع">
-                        <button onclick="removeSignature('${user.id}')" class="app-btn bg-red-400 hover:bg-red-500 p-1 mt-1 text-xs">حذف التوقيع</button>
+            
+            mainContent.innerHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-3xl font-extrabold text-amber-900">إدارة توقيعي الشخصي</h2>
+                    
+                    <div class="bg-white p-6 rounded-xl shadow-2xl">
+                        <div class="mb-6">
+                            <h3 class="text-xl font-semibold text-amber-800 mb-3">التوقيع الحالي</h3>
+                            ${signature ? 
+                                `<div class="signature-container">
+                                    <img src="${signature}" class="signature-preview mx-auto" alt="توقيعي">
+                                    <div class="text-center mt-2">
+                                        <button onclick="removeMySignature()" class="app-btn bg-red-500 hover:bg-red-600 text-sm">حذف التوقيع</button>
+                                    </div>
+                                </div>` : 
+                                `<div class="signature-container text-center text-gray-500">
+                                    <p>لا يوجد توقيع مرفق حالياً</p>
+                                </div>`
+                            }
+                        </div>
+                        
+                        <div class="mb-6">
+                            <h3 class="text-xl font-semibold text-amber-800 mb-3">إضافة توقيع جديد</h3>
+                            <div class="space-y-4">
+                                <div>
+                                    <h4 class="font-semibold mb-2">التوقيع باستخدام اللوحة</h4>
+                                    <div class="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
+                                        <canvas id="signaturePad" width="400" height="150" class="border border-gray-300 rounded-md bg-white touch-none mx-auto block" style="cursor: crosshair;"></canvas>
+                                        <div class="text-center mt-2">
+                                            <button onclick="clearSignaturePad()" class="app-btn bg-gray-500 hover:bg-gray-600 text-sm mr-2">مسح اللوحة</button>
+                                            <button onclick="saveMySignature()" class="app-btn bg-green-500 hover:bg-green-600 text-sm">حفظ التوقيع</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <h4 class="font-semibold mb-2">رفع صورة التوقيع</h4>
+                                    <div class="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 text-center">
+                                        <input type="file" id="uploadSignatureFile" accept="image/*" class="hidden" onchange="uploadMySignature()">
+                                        <button onclick="document.getElementById('uploadSignatureFile').click()" class="app-btn bg-blue-500 hover:bg-blue-600 text-sm">اختر صورة التوقيع</button>
+                                        <p class="text-sm text-gray-500 mt-2">يمكنك رفع صورة لتوقيعك الشخصي</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-amber-50 p-4 rounded-lg">
+                            <h4 class="font-semibold text-amber-800 mb-2">ملاحظات:</h4>
+                            <ul class="list-disc list-inside text-sm text-amber-700 space-y-1">
+                                <li>سيظهر توقيعك في التقارير والفاتورة التي تدخلها</li>
+                                <li>يمكنك استخدام اللوحة للرسم مباشرة أو رفع صورة للتوقيع</li>
+                                <li>التوقيع ضروري لاعتماد التقارير والفاتورة</li>
+                            </ul>
+                        </div>
                     </div>
-                `;
-            } else {
-                return `
-                    <div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100">
-                        <p class="text-xs text-gray-500 mb-1">يرجى التوقيع أدناه أو تحميل صورة:</p>
-                        <canvas id="signaturePad" width="150" height="60" class="border border-gray-300 rounded-md bg-white touch-none" style="cursor: crosshair;"></canvas>
-                        <button onclick="saveSignature('${user.id}')" class="app-btn bg-green-500 hover:bg-green-600 p-1 mt-1 text-xs">توقيع واعتماد</button>
-                        <input type="file" id="uploadSignature" accept="image/*" class="hidden" onchange="uploadSignature('${user.id}')">
-                        <button onclick="document.getElementById('uploadSignature').click()" class="app-btn bg-blue-500 hover:bg-blue-600 p-1 mt-1 text-xs">إدراج صورة توقيع</button>
-                    </div>
-                `;
-            }
+                </div>
+            `;
+            
+            // تهيئة لوحة التوقيع
+            initSignaturePad();
         }
 
-        function saveSignature(userId) {
+        function saveMySignature() {
             const canvas = document.getElementById('signaturePad');
             if (!canvas) return;
 
@@ -1518,40 +2452,71 @@
             }
 
             if (isEmpty) {
-                showModal('تنبيه', 'الرجاء التوقيع على اللوحة أولاً.', APP_STATE.currentScreen);
+                showModal('تنبيه', 'الرجاء التوقيع على اللوحة أولاً.', 'userSignature');
                 return;
             }
 
             const dataURL = canvas.toDataURL('image/png');
-            updateUserSignature(userId, dataURL);
+            updateMySignature(dataURL);
         }
 
-        function removeSignature(userId) {
-            updateUserSignature(userId, null);
-        }
-
-        function uploadSignature(userId) {
-            const fileInput = document.getElementById('uploadSignature');
+        function uploadMySignature() {
+            const fileInput = document.getElementById('uploadSignatureFile');
             const file = fileInput.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    updateUserSignature(userId, e.target.result);
+                    updateMySignature(e.target.result);
                 };
                 reader.readAsDataURL(file);
             }
         }
 
-        function updateUserSignature(userId, signatureDataUrl) {
-            const user = DATA.settings.users.find(u => u.id === userId);
+        function updateMySignature(signatureDataUrl) {
+            const user = DATA.settings.users.find(u => u.id === APP_STATE.loggedInUser.id);
             if (user) {
                 user.signature = signatureDataUrl;
                 saveData();
-                renderInvoice(document.getElementById('site-select-invoice').value, document.getElementById('month-select-invoice').value);
-                showModal('التوقيع', signatureDataUrl ? 'تم حفظ التوقيع/الاعتماد بنجاح.' : 'تم حذف التوقيع بنجاح.', 'monthlyInvoice');
+                showSuccessToast('تم حفظ التوقيع بنجاح');
+                showUserSignature();
             }
         }
-        
+
+        function removeMySignature() {
+            const user = DATA.settings.users.find(u => u.id === APP_STATE.loggedInUser.id);
+            if (user) {
+                user.signature = null;
+                saveData();
+                showSuccessToast('تم حذف التوقيع بنجاح');
+                showUserSignature();
+            }
+        }
+
+        function clearSignaturePad() {
+            const canvas = document.getElementById('signaturePad');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function createSignatureArea(user, type) {
+            const signature = user.signature;
+            if (signature) {
+                return `
+                    <div class="mt-2 p-2 border rounded-lg bg-white">
+                        <img src="${signature}" class="h-16 w-32 border border-gray-300 mx-auto" alt="التوقيع">
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="mt-2 p-2 border border-dashed rounded-lg bg-gray-100">
+                        <p class="text-xs text-gray-500 mb-1">لا يوجد توقيع</p>
+                    </div>
+                `;
+            }
+        }
+
         // ربط التوقيع بالماوس واللمس
         function initSignaturePad() {
             const canvas = document.getElementById('signaturePad');
@@ -1602,7 +2567,7 @@
             canvas.addEventListener('touchmove', draw);
         }
 
-        // === 10. شاشة الإعدادات (Admin Only) ===
+        // === 13. شاشة الإعدادات (Admin Only) ===
 
         function showSettings() {
             if (!APP_STATE.isAdmin) {
@@ -1622,6 +2587,7 @@
                         ${createSettingsCard('تعديل مؤشرات التقييم', 'kpis', 'bg-purple-100', showKpiManagement)}
                         ${createSettingsCard('إعدادات الفواتير والمخالفات', 'invoicing', 'bg-red-100', showInvoiceManagement)}
                         ${createSettingsCard('تغيير صورة الترحيب', 'splash', 'bg-yellow-100', showSplashManagement)}
+                        ${createSettingsCard('تغيير صورة المؤشر', 'kpiImage', 'bg-indigo-100', showKpiImageManagement)}
                     </div>
 
                     <div id="settings-detail-view" class="mt-8 bg-white p-6 rounded-xl shadow-2xl border border-gray-200">
@@ -1637,6 +2603,34 @@
                     <h3 class="text-xl font-semibold text-gray-800">${title}</h3>
                 </div>
             `;
+        }
+        
+        // إدارة صورة المؤشر
+        function showKpiImageManagement() {
+            const detailView = document.getElementById('settings-detail-view');
+            detailView.innerHTML = `
+                <h3 class="text-2xl font-semibold text-indigo-700 mb-4">تغيير صورة مؤشر الأداء</h3>
+                <img src="${DATA.settings.kpiImageUrl}" class="w-32 h-32 rounded-lg shadow-md mb-4" alt="صورة المؤشر الحالية">
+                <input type="file" id="newKpiImage" accept="image/*" class="mb-4 p-2 border rounded-lg">
+                <button onclick="updateKpiImage()" class="app-btn bg-indigo-600 hover:bg-indigo-700">تحديث الصورة</button>
+                <p class="mt-4 text-sm text-gray-500">ملاحظة: حجم الصورة المفضل هو 250x250 بكسل.</p>
+            `;
+        }
+
+        function updateKpiImage() {
+            const fileInput = document.getElementById('newKpiImage');
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    DATA.settings.kpiImageUrl = e.target.result;
+                    saveData();
+                    showSuccessToast('تم تحديث صورة المؤشر بنجاح');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                showModal('خطأ', 'الرجاء اختيار صورة أولاً.', 'settings');
+            }
         }
         
         // إدارة العاملين الجديدة
@@ -1764,7 +2758,7 @@
                 if (site) {
                     site.staff = site.staff.filter(s => s.id !== staffId);
                     saveData();
-                    showModal('نجاح', 'تم حذف العامل بنجاح.', 'settings');
+                    showSuccessToast('تم حذف العامل بنجاح');
                     showStaffManagement();
                 }
             }
@@ -1785,6 +2779,7 @@
                             <option value="user">مستخدم عادي</option>
                             <option value="admin">مدير (أدمن)</option>
                             <option value="approver">معتمد تقارير فقط</option>
+                            <option value="coordinator">منسق (رئيس الشعبة)</option>
                         </select>
                         <select id="newUserSite" class="p-2 border rounded-lg">
                             <option value="">اختر الموقع (للمستخدم العادي)</option>
@@ -2103,7 +3098,7 @@
                 reader.onload = function(e) {
                     DATA.settings.splashImageUrl = e.target.result;
                     saveData();
-                    
+                    showSuccessToast('تم تحديث صورة الترحيب بنجاح');
                 };
                 reader.readAsDataURL(file);
             } else {
@@ -2111,7 +3106,7 @@
             }
         }
 
-        // === 11. وظيفة الرسائل المخصصة (بديل لـ alert) ===
+        // === 14. وظيفة الرسائل المخصصة (بديل لـ alert) ===
 
         function showModal(title, message, navigateToScreen = 'dashboard', params = {}) {
             const modalHTML = `
@@ -2135,7 +3130,7 @@
             }
         }
 
-        // === 12. تشغيل التطبيق ===
+        // === 15. تشغيل التطبيق ===
 
         document.addEventListener('DOMContentLoaded', () => {
             loadData();
